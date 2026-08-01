@@ -35,8 +35,6 @@ OnionExplorer/
 ├── static/                  # JavaScript & stylesheet assets
 ├── templates/               # Flask html templates
 ├── tests/                   # Unified test suite files
-├── Dockerfile               # Multi-stage production container build
-├── docker-compose.yml       # Production orchestration
 ├── wsgi.py                  # Gunicorn gate entrypoint
 ├── requirements.txt         # Package dependencies
 └── main.py                  # Application entry point
@@ -44,44 +42,62 @@ OnionExplorer/
 
 ---
 
-## 🛠️ How to Run
+## 🛠️ How to Deploy & Run on Ubuntu Server
 
-### Method 1: Using Docker (Recommended for Production)
+Follow these steps to deploy the application inside a Python virtual environment on an Ubuntu server:
 
-Bypass the need for setting up a local virtual environment by containerizing the dashboard:
+### 1. Install System Dependencies
+Update system packages and install python virtual environment tools:
+```bash
+sudo apt update
+sudo apt install -y python3-pip python3-venv git
+```
 
-1. **Build and spin up the container**:
-   ```bash
-   docker-compose up --build -d
-   ```
-2. **Access the application**: Open your browser at **http://localhost:5000/**.
-3. **Shut down the container**:
-   ```bash
-   docker-compose down
-   ```
+### 2. Clone the Repository
+```bash
+git clone https://github.com/Piyush2425/OnionExplorer.git
+cd OnionExplorer
+```
 
-### Method 2: Local Python Execution (For Development)
+### 3. Create & Activate Virtual Environment
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
 
-1. **Install dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
-2. **Launch the web application**:
-   ```bash
-   python main.py
-   ```
-3. **Open the browser**: Go to **http://localhost:5000/**.
+### 4. Install Requirements
+```bash
+pip install --upgrade pip
+pip install -r requirements.txt
+```
 
----
-
-## ⚙️ Configuration (.env)
-
-Customize parameters by creating a `.env` file in the root directory:
+### 5. Configure Environment Settings
+Create a `.env` file in the root directory:
+```bash
+nano .env
+```
+Add the configuration variables:
 ```ini
 PORT=5000
 HOST=0.0.0.0
 DB_TYPE=sqlite
 SCRAPE_INTERVAL_MINUTES=1440
 LOG_LEVEL=INFO
-SECRET_KEY=change-in-production-environments
+SECRET_KEY=generate-a-secure-random-key-here
+```
+*(Press `CTRL+O`, `Enter`, and then `CTRL+X` to save and exit)*
+
+### 6. Run the Application
+You can run the web server in the background using Gunicorn:
+```bash
+# Start Gunicorn as a background process using nohup
+nohup gunicorn --workers 3 --bind 0.0.0.0:5000 wsgi:app > gunicorn.log 2>&1 &
+```
+The dashboard is now live and serving threat intelligence daily on port `5000`! You can inspect the Gunicorn server log by running:
+```bash
+tail -f gunicorn.log
+```
+To stop the server, find and kill the process:
+```bash
+pkill gunicorn
 ```
