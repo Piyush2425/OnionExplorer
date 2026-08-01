@@ -1,0 +1,329 @@
+import os
+import sqlite3
+import logging
+from typing import Dict, Any, List
+
+logger = logging.getLogger("OnionExplorer.Database")
+
+class BaseDatabase:
+    def save_entity(self, key: str, name: str, sector: str, type_val: str, sources: List[str], urls: List[Dict[str, Any]], stats: Dict[str, Any] = None):
+        raise NotImplementedError()
+        
+    def save_entities_batch(self, batch: List[Dict[str, Any]]):
+        raise NotImplementedError()
+        
+    def get_unified_data(self) -> Dict[str, Any]:
+        raise NotImplementedError()
+        
+    def save_meta(self, meta: Dict[str, Any]):
+        raise NotImplementedError()
+        
+    def get_meta(self) -> Dict[str, Any]:
+        raise NotImplementedError()
+
+
+class SQLiteIntelDatabase(BaseDatabase):
+    def __init__(self, db_path: str):
+        self.db_path = db_path
+        self._init_db()
+
+    def _get_conn(self):
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def _init_db(self):
+        with self._get_conn() as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS entities (
+                    key TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    sector TEXT NOT NULL,
+                    type TEXT NOT NULL,
+                    sources TEXT NOT NULL, -- JSON array
+                    stats TEXT             -- JSON stats
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS locations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    entity_key TEXT NOT NULL,
+                    url TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    source TEXT,
+                    fqdn TEXT,
+                    version TEXT,
+                    last_visit TEXT,
+                    server_info TEXT,
+                    url_type TEXT,
+                    FOREIGN KEY (entity_key) REFERENCES entities (key) ON DELETE CASCADE,
+                    UNIQUE(entity_key, url)
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS metadata (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                )
+            """)
+            conn.commit()
+
+    def save_entity(self, key: str, name: str, sector: str, type_val: str, sources: List[str], urls: List[Dict[str, Any]], stats: Dict[str, Any] = None):
+        import json
+        with self._get_conn() as conn:
+            conn.execute("""
+                INSERT INTO entities (key, name, sector, type, sources, stats)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(key) DO UPDATE SET
+                    name = excluded.name,
+                    sector = excluded.sector,
+                    type = excluded.type,
+                    sources = excluded.sources,
+                    stats = excluded.stats
+            """, (key, name, sector, type_val, json.dumps(sources), json.dumps(stats or {})))
+
+            # Clear and rebuild locations to stay fully synchronized with feeds
+            conn.execute("DELETE FROM locations WHERE entity_key = ?", (key,))
+            
+            for u in urls:
+                conn.execute("""
+                    INSERT OR REPLACE INTO locations (entity_key, url, status, source, fqdn, version, last_visit, server_info, url_type)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    key,
+                    u.get("url", ""),
+                    u.get("status", "Unknown"),
+                    u.get("source", ""),
+                    u.get("fqdn", ""),
+                    u.get("version", ""),
+                    u.get("last_visit", ""),
+                    u.get("server_info", ""),
+                    u.get("url_type", "")
+                ))
+            conn.commit()
+
+    def save_entities_batch(self, batch: List[Dict[str, Any]]):
+        import json
+        with self._get_conn() as conn:
+            for item in batch:
+                key = item["key"]
+                name = item["name"]
+                sector = item["sector"]
+                type_val = item["type_val"]
+                sources = item["sources"]
+                urls = item["urls"]
+                stats = item["stats"]
+
+                conn.execute("""
+                    INSERT INTO entities (key, name, sector, type, sources, stats)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(key) DO UPDATE SET
+                        name = excluded.name,
+                        sector = excluded.sector,
+                        type = excluded.type,
+                        sources = excluded.sources,
+                        stats = excluded.stats
+                """, (key, name, sector, type_val, json.dumps(sources), json.dumps(stats or {})))
+
+                conn.execute("DELETE FROM locations WHERE entity_key = ?", (key,))
+                
+                for u in urls:
+                    conn.execute("""
+                        INSERT OR REPLACE INTO locations (entity_key, url, status, source, fqdn, version, last_visit, server_info, url_type)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        key,
+                        u.get("url", ""),
+                        u.get("status", "Unknown"),
+                        u.get("source", ""),
+                        u.get("fqdn", ""),
+                        u.get("version", ""),
+                        u.get("last_visit", ""),
+                        u.get("server_info", ""),
+                        u.get("url_type", "")
+                    ))
+            conn.commit()
+
+    def get_unified_data(self) -> Dict[str, Any]:
+        import json
+        forums_groups = {}
+        markets = {}
+        telegram_links = {}
+
+        with self._get_conn() as conn:
+            entities = conn.execute("SELECT * FROM entities").fetchall()
+            for ent in entities:
+                ekey = ent["key"]
+                esector = ent["sector"]
+                
+                locs = conn.execute("SELECT * FROM locations WHERE entity_key = ?", (ekey,)).fetchall()
+                urls_list = []
+                for l in locs:
+                    urls_list.append({
+                        "url": l["url"],
+                        "status": l["status"],
+                        "source": l["source"],
+                        "fqdn": l["fqdn"],
+                        "version": l["version"],
+                        "last_visit": l["last_visit"],
+                        "server_info": l["server_info"],
+                        "url_type": l["url_type"]
+                    })
+                
+                on = sum(1 for u in urls_list if u["status"] == "Online")
+                off = len(urls_list) - on
+                entity_dict = {
+                    "name": ent["name"],
+                    "type": ent["type"],
+                    "sources": json.loads(ent["sources"]),
+                    "stats": json.loads(ent["stats"] or "{}"),
+                    "urls": urls_list,
+                    "online_count": on,
+                    "offline_count": off,
+                    "total_urls": len(urls_list)
+                }
+                
+                if esector == "markets":
+                    markets[ekey] = entity_dict
+                elif esector == "telegram_links":
+                    telegram_links[ekey] = entity_dict
+                else:
+                    forums_groups[ekey] = entity_dict
+
+        meta = self.get_meta()
+        return {
+            "forums_groups": forums_groups,
+            "markets": markets,
+            "telegram_links": telegram_links,
+            "meta": meta
+        }
+
+    def save_meta(self, meta: Dict[str, Any]):
+        import json
+        with self._get_conn() as conn:
+            conn.execute("""
+                INSERT OR REPLACE INTO metadata (key, value)
+                VALUES (?, ?)
+            """, ("scraper_meta", json.dumps(meta)))
+            conn.commit()
+
+    def get_meta(self) -> Dict[str, Any]:
+        import json
+        with self._get_conn() as conn:
+            row = conn.execute("SELECT value FROM metadata WHERE key = ?", ("scraper_meta",)).fetchone()
+            if row:
+                try:
+                    return json.loads(row["value"])
+                except Exception:
+                    pass
+        return {}
+
+
+class MongoIntelDatabase(BaseDatabase):
+    def __init__(self, connection_uri: str = "mongodb://localhost:27017"):
+        import pymongo
+        self.client = pymongo.MongoClient(connection_uri, serverSelectionTimeoutMS=2000)
+        self.db = self.client["onion_explorer"]
+        self.client.server_info() # verify connection
+
+    def save_entity(self, key: str, name: str, sector: str, type_val: str, sources: List[str], urls: List[Dict[str, Any]], stats: Dict[str, Any] = None):
+        self.db.entities.replace_one(
+            {"_id": key},
+            {
+                "_id": key,
+                "name": name,
+                "sector": sector,
+                "type": type_val,
+                "sources": sources,
+                "stats": stats or {},
+                "urls": urls
+            },
+            upsert=True
+        )
+
+    def save_entities_batch(self, batch: List[Dict[str, Any]]):
+        import pymongo
+        operations = []
+        for item in batch:
+            key = item["key"]
+            operations.append(
+                pymongo.ReplaceOne(
+                    {"_id": key},
+                    {
+                        "_id": key,
+                        "name": item["name"],
+                        "sector": item["sector"],
+                        "type": item["type_val"],
+                        "sources": item["sources"],
+                        "stats": item["stats"] or {},
+                        "urls": item["urls"]
+                    },
+                    upsert=True
+                )
+            )
+        if operations:
+            self.db.entities.bulk_write(operations)
+
+    def get_unified_data(self) -> Dict[str, Any]:
+        forums_groups = {}
+        markets = {}
+        telegram_links = {}
+
+        entities = list(self.db.entities.find())
+        for ent in entities:
+            ekey = ent["_id"]
+            esector = ent.get("sector", "forums_groups")
+            urls_list = ent.get("urls", [])
+            on = sum(1 for u in urls_list if u.get("status") == "Online")
+            off = len(urls_list) - on
+            entity_dict = {
+                "name": ent.get("name", ekey),
+                "type": ent.get("type", "group"),
+                "sources": ent.get("sources", []),
+                "stats": ent.get("stats", {}),
+                "urls": urls_list,
+                "online_count": on,
+                "offline_count": off,
+                "total_urls": len(urls_list)
+            }
+            if esector == "markets":
+                markets[ekey] = entity_dict
+            elif esector == "telegram_links":
+                telegram_links[ekey] = entity_dict
+            else:
+                forums_groups[ekey] = entity_dict
+
+        meta = self.get_meta()
+        return {
+            "forums_groups": forums_groups,
+            "markets": markets,
+            "telegram_links": telegram_links,
+            "meta": meta
+        }
+
+    def save_meta(self, meta: Dict[str, Any]):
+        self.db.metadata.replace_one(
+            {"_id": "scraper_meta"},
+            {"_id": "scraper_meta", "value": meta},
+            upsert=True
+        )
+
+    def get_meta(self) -> Dict[str, Any]:
+        doc = self.db.metadata.find_one({"_id": "scraper_meta"})
+        if doc and "value" in doc:
+            return doc["value"]
+        return {}
+
+
+def get_database() -> BaseDatabase:
+    try:
+        import pymongo
+        mongo_uri = os.environ.get("MONGO_URI", "mongodb://localhost:27017")
+        db = MongoIntelDatabase(mongo_uri)
+        logger.info("Database Connection: Successfully connected to MongoDB.")
+        return db
+    except Exception as e:
+        logger.info(f"Database Connection: MongoDB not available or unreachable ({e}). Falling back to local SQLite.")
+        db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "onion_explorer.db")
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        return SQLiteIntelDatabase(db_path)

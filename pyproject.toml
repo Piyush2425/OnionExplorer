@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "onion-explorer"
+version = "1.0.0"
+description = "Threat Actor Location Monitoring Library for Ransomware & Onion Leak Sites"
+authors = [{ name = "ThreatActix Team" }]
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "requests>=2.28.0",
+    "beautifulsoup4>=4.11.0",
+    "urllib3>=1.26.0"
+]
+
+[project.optional-dependencies]
+async = ["aiohttp>=3.8.0"]
+sqlite = []
+
+[tool.setuptools.packages.find]
+where = ["."]

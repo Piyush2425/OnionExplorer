@@ -1,0 +1,9 @@
+{
+  "github_feeds": [
+    "https://raw.githubusercontent.com/fastfire/deepdarkCTI/main/telegram_threat_actors.md",
+    "https://raw.githubusercontent.com/fastfire/deepdarkCTI/main/telegram_infostealer.md",
+    "https://raw.githubusercontent.com/fastfire/deepdarkCTI/main/forum.md",
+    "https://raw.githubusercontent.com/fastfire/deepdarkCTI/main/ransomware_gang.md",
+    "https://raw.githubusercontent.com/fastfire/deepdarkCTI/main/markets.md"
+  ]
+}

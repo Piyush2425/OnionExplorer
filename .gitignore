@@ -1,0 +1,36 @@
+# Python Environment
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+scrapenv/
+pip-log.txt
+
+# Databases
+data/*.db
+data/onion_explorer.db
+
+# Scraper Threat Data Cache (excluding config template)
+data/*.json
+data/*.csv
+data/feeds/
+!data/config.json
+
+# Environment Config & Secrets
+.env
+.env.local
+.env.*
+
+# Logs
+*.log
+data/logs/
+
+# IDEs & System files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
