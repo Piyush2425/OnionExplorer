@@ -44,39 +44,32 @@ OnionExplorer/
 
 ## 🛠️ How to Deploy & Run on Ubuntu Server
 
-Follow these steps to deploy the application inside a Python virtual environment on an Ubuntu server:
+### ✅ One-Time Setup (Only required on first deployment)
 
-### 1. Install System Dependencies
-Update system packages and install python virtual environment tools:
+#### Step 1 — Install System Dependencies
 ```bash
-sudo apt update
-sudo apt install -y python3-pip python3-venv git
+sudo apt update && sudo apt install -y python3-pip python3-venv git
 ```
 
-### 2. Clone the Repository
+#### Step 2 — Clone the Repository
 ```bash
 git clone https://github.com/Piyush2425/OnionExplorer.git
 cd OnionExplorer
 ```
 
-### 3. Create & Activate Virtual Environment
+#### Step 3 — Create Virtual Environment & Install Packages
 ```bash
 python3 -m venv venv
 source venv/bin/activate
-```
-
-### 4. Install Requirements
-```bash
 pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### 5. Configure Environment Settings
-Create a `.env` file in the root directory:
+#### Step 4 — Configure Environment
 ```bash
 nano .env
 ```
-Add the configuration variables:
+Paste the following settings and save (`CTRL+O → Enter → CTRL+X`):
 ```ini
 PORT=5000
 HOST=0.0.0.0
@@ -85,19 +78,28 @@ SCRAPE_INTERVAL_MINUTES=1440
 LOG_LEVEL=INFO
 SECRET_KEY=generate-a-secure-random-key-here
 ```
-*(Press `CTRL+O`, `Enter`, and then `CTRL+X` to save and exit)*
 
-### 6. Run the Application
-You can run the web server in the background using Gunicorn:
+---
+
+### 🚀 Start the Server (Every Time)
+
+After completing the one-time setup above, simply run **this single command** to start the dashboard:
+
 ```bash
-# Start Gunicorn as a background process using nohup
-nohup gunicorn --workers 3 --bind 0.0.0.0:5000 wsgi:app > gunicorn.log 2>&1 &
+bash serve.sh
 ```
-The dashboard is now live and serving threat intelligence daily on port `5000`! You can inspect the Gunicorn server log by running:
-```bash
-tail -f gunicorn.log
-```
-To stop the server, find and kill the process:
+
+> **Dashboard is live at**: `http://localhost:5000` (or `http://YOUR_SERVER_IP:5000`)
+
+---
+
+### 🛑 Stop the Server
 ```bash
 pkill gunicorn
 ```
+
+### 📄 View Logs
+```bash
+tail -f data/logs/gunicorn.log
+```
+
