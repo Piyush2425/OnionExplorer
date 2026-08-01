@@ -9,6 +9,11 @@ venv/
 .venv/
 scrapenv/
 pip-log.txt
+*.egg-info/
+*.egg
+
+# Temp/copy files
+*.env copy
 
 # Databases
 data/*.db
