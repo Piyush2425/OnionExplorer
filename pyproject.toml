@@ -21,3 +21,6 @@ sqlite = []
 
 [tool.setuptools.packages.find]
 where = ["."]
+
+[project.scripts]
+onion = "cli:main"
