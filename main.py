@@ -33,7 +33,7 @@ from flask import Flask, render_template, jsonify, request, make_response
 # Import threat location library
 from onion_explorer import ThreatLocationClient
 from onion_explorer.exporters import export_to_json
-from monitors import ransomfeed, ransomelook, ransomelive, github_feed, telegram_checker
+from monitors import ransomfeed, ransomelook, ransomelive, github_feed, telegram_checker, watchguard
 
 # ---------- Configuration ----------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -53,6 +53,7 @@ RANSOMWARE_LIVE_JSON = os.path.join(DATA_DIR, "ransomware_live_locations.json")
 GITHUB_TELEGRAM_JSON = os.path.join(DATA_DIR, "github_telegram_links.json")
 GITHUB_FORUMS_JSON = os.path.join(DATA_DIR, "github_forums_groups.json")
 GITHUB_MARKETS_JSON = os.path.join(DATA_DIR, "github_markets.json")
+WATCHGUARD_JSON = os.path.join(DATA_DIR, "watchguard_ransomware.json")
 
 # ---------- Logging ----------
 os.makedirs(os.path.join(DATA_DIR, "logs"), exist_ok=True)
@@ -303,6 +304,44 @@ def build_unified_data_from_files():
                     "url_type": "market"
                 })
 
+    # ── 9. WatchGuard Scraped Data ──
+    wg_data = load_json_safe(WATCHGUARD_JSON)
+    if wg_data and isinstance(wg_data, list):
+        for item in wg_data:
+            gname = item.get("group_name", "").strip()
+            if not gname:
+                continue
+            key = gname.lower().strip()
+            if key not in forums_groups:
+                forums_groups[key] = make_entity(gname)
+            if "watchguard" not in forums_groups[key]["sources"]:
+                forums_groups[key]["sources"].append("watchguard")
+            
+            # Map stats
+            forums_groups[key]["stats"]["watchguard_status"] = item.get("status", "Inactive")
+            if item.get("first_seen_display"):
+                forums_groups[key]["stats"]["first_seen"] = item.get("first_seen_display")
+            if item.get("last_seen_display"):
+                forums_groups[key]["stats"]["last_seen"] = item.get("last_seen_display")
+
+            onions = item.get("onion_links", [])
+            for o in onions:
+                if not o or o.lower() == "none":
+                    continue
+                u_str = o.strip()
+                if not u_str.startswith("http"):
+                    u_str = "http://" + u_str
+                # Avoid duplicates
+                if not any(existing_u.get("url") == u_str and existing_u.get("source") == "watchguard" for existing_u in forums_groups[key]["urls"]):
+                    # Show onion link status as "Online" if group is Active, otherwise Offline
+                    status_val = "Online" if item.get("status") == "Active" else "Offline"
+                    forums_groups[key]["urls"].append({
+                        "url": u_str,
+                        "status": status_val,
+                        "source": "watchguard",
+                        "last_visit": item.get("last_seen_display", "")
+                    })
+
     # ── Compute counts ──
     for collection in (forums_groups, markets, telegram_links):
         for entity in collection.values():
@@ -321,6 +360,7 @@ def build_unified_data_from_files():
         (GITHUB_TELEGRAM_JSON, "github_telegram"),
         (GITHUB_FORUMS_JSON, "github_forums"),
         (GITHUB_MARKETS_JSON, "github_markets"),
+        (WATCHGUARD_JSON, "watchguard"),
     ]:
         mt = get_file_mtime(fp)
         if mt:
@@ -531,6 +571,13 @@ def run_all_scrapers():
             sync_data_to_database()
         except Exception as e:
             log.error(f"RansomwareLive run error: {e}")
+
+        # 6. WatchGuard
+        try:
+            run_scraper("WatchGuard", watchguard.main)
+            sync_data_to_database()
+        except Exception as e:
+            log.error(f"WatchGuard run error: {e}")
 
         # 6. Library unified export
         try:

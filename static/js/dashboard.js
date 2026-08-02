@@ -447,6 +447,7 @@
         if (src === 'ransomfeed') return 'RansomFeed Feed';
         if (src === 'ransomlook') return 'RansomLook Feed';
         if (src === 'ransomware.live') return 'Ransomware.live Feed';
+        if (src === 'watchguard') return 'WatchGuard Tracker';
         if (src.startsWith('github:')) {
             return `GitHub: ${src.substring(7)}`;
         }
@@ -469,6 +470,9 @@
             } else if (s === 'ransomlook') {
                 label = 'RLook';
                 cls = 'ransomlook';
+            } else if (s === 'watchguard') {
+                label = 'WatchGuard';
+                cls = 'watchguard';
             } else if (s.startsWith('github:')) {
                 label = s.substring(7);
                 cls = 'github';

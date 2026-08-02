@@ -567,6 +567,7 @@ body::after {
 .source-tag.ransomfeed { background: var(--accent-cyan-dim); color: var(--accent-cyan); }
 .source-tag.ransomlook { background: var(--accent-green-dim); color: var(--accent-green); }
 .source-tag.ransomware-live { background: var(--accent-purple-dim); color: var(--accent-purple); }
+.source-tag.watchguard { background: var(--accent-orange-dim); color: var(--accent-orange); }
 
 /* ---------- URL List (inside entity card) ---------- */
 .entity-card-body {
