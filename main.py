@@ -619,8 +619,18 @@ def apscheduler_scraper_job():
 
 def start_background_scraper():
     """Initialize and start the APScheduler background thread."""
+    has_existing_data = False
+    try:
+        data = build_unified_data()
+        if data.get("forums_groups") or data.get("markets") or data.get("telegram_links"):
+            # Check that there's actual data entries
+            if len(data.get("forums_groups", {})) > 0 or len(data.get("markets", {})) > 0 or len(data.get("telegram_links", {})) > 0:
+                has_existing_data = True
+    except Exception as e:
+        log.warning(f"Failed to check existing database records: {e}")
+
     with state_lock:
-        scraper_state["next_scrape"] = "Scraper starting..."
+        scraper_state["next_scrape"] = "Calculating..."
         for fp in [RANSOMFEED_URLS_JSON, RANSOMLOOK_GROUPS_JSON, RANSOMWARE_LIVE_JSON]:
             mt = get_file_mtime(fp)
             if mt:
@@ -637,11 +647,19 @@ def start_background_scraper():
     )
     scheduler.start()
     
-    # Trigger an initial scrape run immediately in a separate daemon thread to not block server startup
-    init_thread = threading.Thread(target=apscheduler_scraper_job, daemon=True, name="InitialScrape")
-    init_thread.start()
-    
-    log.info(f"APScheduler background scraper started (Immediate scrape triggered, then every {scraper_state['interval_minutes']} min)")
+    if has_existing_data:
+        # DB has data, skip initial run and schedule next run time based on interval
+        next_time = datetime.now() + timedelta(minutes=scraper_state["interval_minutes"])
+        with state_lock:
+            scraper_state["next_scrape"] = next_time.strftime("%Y-%m-%d %H:%M:%S")
+        log.info(f"Database has existing threat intelligence data. Skipping initial startup scrape. Next run scheduled at {next_time.strftime('%Y-%m-%d %H:%M:%S')}")
+    else:
+        # DB is empty, trigger an immediate initial run to scrape feeds
+        with state_lock:
+            scraper_state["next_scrape"] = "Immediate scrape in progress..."
+        init_thread = threading.Thread(target=apscheduler_scraper_job, daemon=True, name="InitialScrape")
+        init_thread.start()
+        log.info(f"Database is empty. Triggering immediate startup scrape in background...")
 
 
 # ═══════════════════════════════════════════════
