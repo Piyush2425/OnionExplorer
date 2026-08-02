@@ -32,7 +32,7 @@ from flask import Flask, render_template, jsonify, request, make_response
 
 # Import threat location library
 from onion_explorer import ThreatLocationClient
-from onion_explorer.exporters import export_to_json
+from onion_explorer.exporters import export_to_json, export_to_csv
 from monitors import ransomfeed, ransomelook, ransomelive, github_feed, telegram_checker, watchguard
 
 # ---------- Configuration ----------
@@ -452,18 +452,17 @@ def sync_data_to_database():
 
 
 def cleanup_raw_data_files():
-    """Delete raw JSON/CSV feed cache files from data/ directory to preserve cleanliness."""
+    """Delete raw JSON feed cache files from data/ directory to preserve cleanliness but keep CSV files."""
     import glob
-    log.info("Cleaning up temporary raw feed cache files from data/...")
+    log.info("Cleaning up temporary raw JSON feed cache files from data/...")
     patterns = [
         os.path.join(DATA_DIR, "*.json"),
-        os.path.join(DATA_DIR, "*.csv"),
     ]
     for pattern in patterns:
         for filepath in glob.glob(pattern):
             filename = os.path.basename(filepath)
-            # EXCLUDE config.json and the SQLite database file
-            if filename in ("config.json", "onion_explorer.db"):
+            # EXCLUDE config.json
+            if filename in ("config.json",):
                 continue
             try:
                 os.remove(filepath)
@@ -584,7 +583,8 @@ def run_all_scrapers():
             client = ThreatLocationClient()
             locations = client.fetch_all_locations()
             export_to_json(locations, os.path.join(DATA_DIR, "all_threat_locations.json"))
-            log.info(f"onion_explorer library unified dataset exported: {len(locations)} locations")
+            export_to_csv(locations, os.path.join(DATA_DIR, "all_threat_locations.csv"))
+            log.info(f"onion_explorer library unified dataset exported: {len(locations)} locations (JSON & CSV)")
         except Exception as e:
             log.error(f"onion_explorer unified export error: {e}")
 
