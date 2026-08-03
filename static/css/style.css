@@ -1041,3 +1041,49 @@ body.light-theme .settings-group select {
         transition-duration: 0.01ms !important;
     }
 }
+
+/* ---------- Search Summary Banner ---------- */
+.search-summary-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-accent);
+    border-radius: var(--radius-md);
+    padding: 12px 18px;
+    margin-bottom: 20px;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    box-shadow: 0 4px 15px rgba(0, 212, 255, 0.05);
+    animation: fadeIn var(--transition-fast) ease-out;
+}
+
+.search-summary-banner .banner-icon {
+    font-size: 1.1rem;
+}
+
+.search-summary-banner .banner-text {
+    flex-grow: 1;
+    font-weight: 500;
+}
+
+.search-summary-banner .banner-text strong {
+    color: var(--accent-cyan);
+    font-weight: 600;
+}
+
+.search-summary-banner .clear-search-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.8rem;
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    transition: all var(--transition-fast);
+}
+
+.search-summary-banner .clear-search-btn:hover {
+    color: var(--accent-red);
+    background: rgba(239, 68, 68, 0.1);
+}

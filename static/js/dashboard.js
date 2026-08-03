@@ -149,6 +149,16 @@
             }, 200);
         });
 
+        // Clear search button
+        const clearSearchBtn = document.getElementById('clearSearchBtn');
+        if (clearSearchBtn) {
+            clearSearchBtn.addEventListener('click', () => {
+                searchInput.value = '';
+                searchQuery = '';
+                applyAndRender();
+            });
+        }
+
         // Tabs
         document.querySelectorAll('.tab[data-tab]').forEach(tab => {
             tab.addEventListener('click', () => {
@@ -329,6 +339,28 @@
                 default: return 0;
             }
         });
+
+        // Calculate matching URLs/links
+        let totalMatchingLinks = 0;
+        filtered.forEach(e => {
+            let urlsToCount = e.urls;
+            if (currentSourceFilter !== 'all') {
+                urlsToCount = e.urls.filter(u => u.source === currentSourceFilter);
+            }
+            totalMatchingLinks += urlsToCount.length;
+        });
+
+        // Update search summary banner
+        const banner = document.getElementById('searchSummaryBanner');
+        const bannerText = document.getElementById('searchSummaryText');
+        if (banner && bannerText) {
+            if (searchQuery) {
+                banner.style.display = 'flex';
+                bannerText.innerHTML = `Search results for "<strong>${esc(searchQuery)}</strong>": Found <strong>${filtered.length}</strong> matching entries and <strong>${totalMatchingLinks}</strong> threat links.`;
+            } else {
+                banner.style.display = 'none';
+            }
+        }
 
         renderEntityList(filtered);
     }
