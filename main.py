@@ -696,49 +696,55 @@ def api_export_csv():
     source_filter = request.args.get("source", "all")
     data = build_unified_data()
     
-    target_data = {}
-    label = "Forums/Groups"
-    if sector == "markets":
-        target_data = data.get("markets", {})
+    if sector == "all_sectors":
+        collections_to_export = [
+            (data.get("forums_groups", {}), "Group"),
+            (data.get("markets", {}), "Market"),
+            (data.get("telegram_links", {}), "Telegram")
+        ]
+        label = "All Sectors"
+    elif sector == "markets":
+        collections_to_export = [(data.get("markets", {}), "Market")]
         label = "Market"
     elif sector == "telegram_links":
-        target_data = data.get("telegram_links", {})
+        collections_to_export = [(data.get("telegram_links", {}), "Telegram")]
         label = "Telegram"
     else:
-        target_data = data.get("forums_groups", {})
-        label = "Forums/Groups"
+        collections_to_export = [(data.get("forums_groups", {}), "Group")]
+        label = "Group"
 
     rows = []
     total_records = 0
     online_count = 0
 
-    for key, val in target_data.items():
-        for url_info in val.get("urls", []):
-            url_status = url_info.get("status", "Unknown")
-            is_online = (url_status == "Online")
-            url_source = url_info.get("source", "")
-            
-            # Apply status filter
-            if status_filter == "online" and not is_online:
-                continue
-            if status_filter == "offline" and is_online:
-                continue
-            # Apply source filter
-            if source_filter != "all" and url_source != source_filter:
-                continue
+    for target_data, sec_label in collections_to_export:
+        for key, val in target_data.items():
+            for url_info in val.get("urls", []):
+                url_status = url_info.get("status", "Unknown")
+                is_online = (url_status == "Online")
+                url_source = url_info.get("source", "")
                 
-            total_records += 1
-            if is_online:
-                online_count += 1
+                # Apply status filter
+                if status_filter == "online" and not is_online:
+                    continue
+                if status_filter == "offline" and is_online:
+                    continue
+                # Apply source filter
+                if source_filter != "all" and url_source != source_filter:
+                    continue
+                    
+                total_records += 1
+                if is_online:
+                    online_count += 1
 
-            rows.append((
-                sanitize_csv_cell(val.get("name", key)),
-                sanitize_csv_cell(label),
-                sanitize_csv_cell(url_info.get("url", "")),
-                sanitize_csv_cell(url_status),
-                sanitize_csv_cell(url_source),
-                sanitize_csv_cell(url_info.get("last_visit", "") or datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"))
-            ))
+                rows.append((
+                    sanitize_csv_cell(val.get("name", key)),
+                    sanitize_csv_cell(sec_label),
+                    sanitize_csv_cell(url_info.get("url", "")),
+                    sanitize_csv_cell(url_status),
+                    sanitize_csv_cell(url_source),
+                    sanitize_csv_cell(url_info.get("last_visit", "") or datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"))
+                ))
 
     si = io.StringIO()
     cw = csv.writer(si)
@@ -767,17 +773,22 @@ def api_export_markdown():
     source_filter = request.args.get("source", "all")
     data = build_unified_data()
     
-    target_data = {}
-    label = "Forums/Groups"
-    if sector == "markets":
-        target_data = data.get("markets", {})
+    if sector == "all_sectors":
+        collections_to_export = [
+            (data.get("forums_groups", {}), "Group"),
+            (data.get("markets", {}), "Market"),
+            (data.get("telegram_links", {}), "Telegram")
+        ]
+        label = "All Sectors"
+    elif sector == "markets":
+        collections_to_export = [(data.get("markets", {}), "Market")]
         label = "Market"
     elif sector == "telegram_links":
-        target_data = data.get("telegram_links", {})
+        collections_to_export = [(data.get("telegram_links", {}), "Telegram")]
         label = "Telegram"
     else:
-        target_data = data.get("forums_groups", {})
-        label = "Forums/Groups"
+        collections_to_export = [(data.get("forums_groups", {}), "Group")]
+        label = "Group"
 
     total_entities = 0
     total_urls = 0
@@ -785,39 +796,40 @@ def api_export_markdown():
     offline_count = 0
     
     rows = []
-    for key, val in target_data.items():
-        entity_has_matched_urls = False
-        for url_info in val.get("urls", []):
-            url_status = url_info.get("status", "Unknown")
-            is_online = (url_status == "Online")
-            url_source = url_info.get("source", "")
-            
-            # Apply status filter
-            if status_filter == "online" and not is_online:
-                continue
-            if status_filter == "offline" and is_online:
-                continue
-            # Apply source filter
-            if source_filter != "all" and url_source != source_filter:
-                continue
+    for target_data, sec_label in collections_to_export:
+        for key, val in target_data.items():
+            entity_has_matched_urls = False
+            for url_info in val.get("urls", []):
+                url_status = url_info.get("status", "Unknown")
+                is_online = (url_status == "Online")
+                url_source = url_info.get("source", "")
                 
-            entity_has_matched_urls = True
-            total_urls += 1
-            if is_online:
-                online_count += 1
-            else:
-                offline_count += 1
-                
-            rows.append({
-                "name": val.get("name", key),
-                "sector": label,
-                "url": url_info.get("url", ""),
-                "status": "🟢 Online" if is_online else "🔴 Offline",
-                "source": url_source,
-                "last_visit": url_info.get("last_visit", "") or "N/A"
-            })
-        if entity_has_matched_urls:
-            total_entities += 1
+                # Apply status filter
+                if status_filter == "online" and not is_online:
+                    continue
+                if status_filter == "offline" and is_online:
+                    continue
+                # Apply source filter
+                if source_filter != "all" and url_source != source_filter:
+                    continue
+                    
+                entity_has_matched_urls = True
+                total_urls += 1
+                if is_online:
+                    online_count += 1
+                else:
+                    offline_count += 1
+                    
+                rows.append({
+                    "name": val.get("name", key),
+                    "sector": sec_label,
+                    "url": url_info.get("url", ""),
+                    "status": "🟢 Online" if is_online else "🔴 Offline",
+                    "source": url_source,
+                    "last_visit": url_info.get("last_visit", "") or "N/A"
+                })
+            if entity_has_matched_urls:
+                total_entities += 1
 
     md = []
     md.append("# OnionExplorer Threat Intelligence Report")

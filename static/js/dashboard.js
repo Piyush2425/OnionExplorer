@@ -1,7 +1,6 @@
 /**
  * OnionExplorer v2 — Dashboard Client Logic
- * Groups/Markets tabs, entity cards with all URLs, search/filter/sort.
- * No charts.
+ * Unified threat directory table with merged/deduplicated onion URLs.
  */
 
 (function () {
@@ -13,7 +12,7 @@
     let allForumsGroups = [];
     let allMarkets = [];
     let allTelegramLinks = [];
-    let currentTab = 'forums_groups'; // 'forums_groups', 'markets', or 'telegram_links'
+    let currentTab = 'all_sectors'; // 'all_sectors', 'forums_groups', 'markets', 'telegram_links'
     let currentFilter = 'all'; // 'all', 'has-online', 'all-offline'
     let currentSort = 'name-asc';
     let currentSourceFilter = 'all';
@@ -93,8 +92,19 @@
 
         } catch (err) {
             console.error('Failed to load data:', err);
-            document.getElementById('entityList').innerHTML =
-                '<div class="no-results"><div class="icon">⚠️</div><p>Failed to load data. Is the server running?</p></div>';
+            const tbody = document.getElementById('unifiedTableBody');
+            if (tbody) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="no-results-cell">
+                            <div class="no-results">
+                                <div class="icon">⚠️</div>
+                                <p>Failed to load threat intelligence data. Is the server running?</p>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }
         }
     }
 
@@ -123,7 +133,7 @@
             targetTab = 'forums_groups';
         }
         
-        if (currentTab !== targetTab) {
+        if (currentTab !== targetTab && currentTab !== 'all_sectors') {
             currentTab = targetTab;
             // Update active state in tabs CSS class
             document.querySelectorAll('.tab').forEach(tab => {
@@ -179,11 +189,14 @@
             });
         });
 
-        // Sort
-        document.getElementById('sortSelect').addEventListener('change', (e) => {
-            currentSort = e.target.value;
-            applyAndRender();
-        });
+        // Sort Select
+        const sortSelect = document.getElementById('sortSelect');
+        if (sortSelect) {
+            sortSelect.addEventListener('change', (e) => {
+                currentSort = e.target.value;
+                applyAndRender();
+            });
+        }
 
         // Source Filter
         const sourceFilterSelect = document.getElementById('sourceFilterSelect');
@@ -267,26 +280,6 @@
                 }
             });
         }
-
-        // Trigger Scrape Button
-        const runScrapeBtn = document.getElementById('runScrapeBtn');
-        if (runScrapeBtn) {
-            runScrapeBtn.addEventListener('click', async () => {
-                runScrapeBtn.disabled = true;
-                runScrapeBtn.textContent = '🔄 Scraper Running...';
-                try {
-                    const resp = await fetch('/api/scraper/run', { method: 'POST' });
-                    const res = await resp.json();
-                    if (res.status === 'started' || res.status === 'already_running') {
-                        checkScraperStatus();
-                    }
-                } catch (err) {
-                    console.error('Failed to trigger scrape:', err);
-                    runScrapeBtn.disabled = false;
-                    runScrapeBtn.textContent = '🔄 Scrape Now';
-                }
-            });
-        }
     }
 
     // ═══ FILTER, SORT, RENDER ═══
@@ -296,13 +289,15 @@
             source = allForumsGroups;
         } else if (currentTab === 'markets') {
             source = allMarkets;
-        } else {
+        } else if (currentTab === 'telegram_links') {
             source = allTelegramLinks;
+        } else {
+            source = [...allForumsGroups, ...allMarkets, ...allTelegramLinks];
         }
 
         // Filter
         let filtered = source.filter(e => {
-            // Search
+            // Search (Search both Actor name and onion URL)
             if (searchQuery) {
                 const haystack = (e.name + ' ' + e.key + ' ' + e.urls.map(u => u.url).join(' ')).toLowerCase();
                 if (!haystack.includes(searchQuery)) return false;
@@ -347,7 +342,9 @@
             if (currentSourceFilter !== 'all') {
                 urlsToCount = e.urls.filter(u => u.source === currentSourceFilter);
             }
-            totalMatchingLinks += urlsToCount.length;
+            // Deduplicate to count unique links matching search
+            const uniqueUrls = new Set(urlsToCount.map(u => u.url.trim()));
+            totalMatchingLinks += uniqueUrls.size;
         });
 
         // Update search summary banner
@@ -356,7 +353,7 @@
         if (banner && bannerText) {
             if (searchQuery) {
                 banner.style.display = 'flex';
-                bannerText.innerHTML = `Search results for "<strong>${esc(searchQuery)}</strong>": Found <strong>${filtered.length}</strong> matching entries and <strong>${totalMatchingLinks}</strong> threat links.`;
+                bannerText.innerHTML = `Search results for "<strong>${esc(searchQuery)}</strong>": Found <strong>${filtered.length}</strong> matching entries and <strong>${totalMatchingLinks}</strong> unique threat links.`;
             } else {
                 banner.style.display = 'none';
             }
@@ -389,19 +386,30 @@
         let totalOffline = 0;
 
         const countUrlsForCollection = (list) => {
+            const uniqueUrls = {};
             list.forEach(e => {
                 let urlsToCount = e.urls;
                 if (srcFilter !== 'all') {
                     urlsToCount = e.urls.filter(u => u.source === srcFilter);
                 }
                 urlsToCount.forEach(u => {
-                    totalUrls++;
-                    if (u.status === 'Online') {
-                        totalOnline++;
-                    } else {
-                        totalOffline++;
+                    const urlStr = u.url.trim();
+                    if (!uniqueUrls[urlStr]) {
+                        uniqueUrls[urlStr] = u.status || 'Offline';
+                    } else if (u.status === 'Online') {
+                        uniqueUrls[urlStr] = 'Online';
                     }
                 });
+            });
+            
+            // Sum up
+            Object.values(uniqueUrls).forEach(status => {
+                totalUrls++;
+                if (status === 'Online') {
+                    totalOnline++;
+                } else {
+                    totalOffline++;
+                }
             });
         };
 
@@ -434,6 +442,10 @@
     }
 
     function updateTabCounts() {
+        const totalCount = allForumsGroups.length + allMarkets.length + allTelegramLinks.length;
+        if (document.getElementById('tabAllCount')) {
+            document.getElementById('tabAllCount').textContent = totalCount;
+        }
         document.getElementById('tabGroupsCount').textContent = allForumsGroups.length;
         document.getElementById('tabMarketsCount').textContent = allMarkets.length;
         document.getElementById('tabTelegramCount').textContent = allTelegramLinks.length;
@@ -451,7 +463,6 @@
             text.textContent = 'Updated: ' + meta.last_scraped;
         } else {
             dot.classList.remove('scraping');
-            // Check source freshness
             const freshness = meta.source_freshness || {};
             const times = Object.values(freshness);
             if (times.length > 0) {
@@ -464,15 +475,24 @@
 
     // ═══ ENTITY LIST ═══
     function renderEntityList(entities) {
-        const container = document.getElementById('entityList');
+        const tbody = document.getElementById('unifiedTableBody');
+        if (!tbody) return;
 
         if (entities.length === 0) {
-            container.innerHTML =
-                '<div class="no-results"><div class="icon">🔍</div><p>No results match your search or filter.</p></div>';
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="no-results-cell">
+                        <div class="no-results">
+                            <div class="icon">🔍</div>
+                            <p>No results match your search or filter.</p>
+                        </div>
+                    </td>
+                </tr>
+            `;
             return;
         }
 
-        container.innerHTML = entities.map(e => renderEntityCard(e)).join('');
+        tbody.innerHTML = entities.map(e => renderEntityRow(e)).join('');
     }
 
     function formatSourceName(src) {
@@ -486,10 +506,24 @@
         return src;
     }
 
-    function renderEntityCard(e) {
+    function renderEntityRow(e) {
         const statusType = getStatus(e);
         const statusLabel = statusType === 'mixed' ? 'Mixed' : statusType === 'online' ? 'Online' : 'Offline';
         
+        // Sector display label
+        let sectorLabel = 'Group';
+        let sectorClass = 'group';
+        if (e.type === 'market' || e.sector === 'markets') {
+            sectorLabel = '🏪 Market';
+            sectorClass = 'market';
+        } else if (e.type === 'telegram' || e.sector === 'telegram_links') {
+            sectorLabel = '📢 Telegram';
+            sectorClass = 'telegram';
+        } else {
+            sectorLabel = '👥 Group';
+            sectorClass = 'group';
+        }
+
         const sourceTags = e.sources.map(s => {
             let label = s;
             let cls = s;
@@ -512,87 +546,115 @@
             return `<span class="source-tag ${cls}">${esc(label)}</span>`;
         }).join('');
 
-        // Filter URLs inside the card if a specific source filter is active
+        // Apply filters to URLs to show counts
         let urlsToRender = e.urls;
         if (currentSourceFilter !== 'all') {
             urlsToRender = e.urls.filter(u => u.source === currentSourceFilter);
         }
 
-        // Group URLs by source feed
-        const groups = {};
+        // Deduplicate URLs for the accordion view
+        const mergedUrlsMap = {};
         urlsToRender.forEach(u => {
-            const src = u.source || 'Unknown';
-            if (!groups[src]) groups[src] = [];
-            groups[src].push(u);
+            const urlStr = u.url.trim();
+            if (!mergedUrlsMap[urlStr]) {
+                mergedUrlsMap[urlStr] = {
+                    url: urlStr,
+                    status: u.status || 'Offline',
+                    sources: new Set(),
+                    last_visit: u.last_visit || ''
+                };
+            }
+            if (u.source) {
+                mergedUrlsMap[urlStr].sources.add(u.source);
+            }
+            if (u.status === 'Online') {
+                mergedUrlsMap[urlStr].status = 'Online';
+            }
+            if (u.last_visit && (!mergedUrlsMap[urlStr].last_visit || u.last_visit > mergedUrlsMap[urlStr].last_visit)) {
+                mergedUrlsMap[urlStr].last_visit = u.last_visit;
+            }
         });
 
-        // Generate visual HTML panel per source group
-        const sourceSectionsHtml = Object.entries(groups).map(([srcName, urls]) => {
-            const cleanSrcName = formatSourceName(srcName);
-            const online = urls.filter(u => u.status === 'Online');
-            const offline = urls.filter(u => u.status !== 'Online');
+        const mergedUrls = Object.values(mergedUrlsMap);
+        const onlineCount = mergedUrls.filter(u => u.status === 'Online').length;
+        const totalCount = mergedUrls.length;
 
-            const onlineRows = online.length > 0
-                ? online.map(u => renderUrlRow(u)).join('')
-                : '<div class="no-urls-placeholder">No active online links.</div>';
-
-            const offlineRows = offline.length > 0
-                ? offline.map(u => renderUrlRow(u)).join('')
-                : '<div class="no-urls-placeholder">No inactive offline links.</div>';
+        // Generate nested table HTML
+        const nestedRowsHtml = mergedUrls.map(u => {
+            const isOnline = u.status === 'Online';
+            
+            // Generate source badges for the individual URL
+            const urlSourceBadges = Array.from(u.sources).map(s => {
+                let label = s;
+                let cls = s;
+                if (s === 'ransomware.live') { label = 'R.Live'; cls = 'ransomware-live'; }
+                else if (s === 'ransomfeed') { label = 'RFeed'; cls = 'ransomfeed'; }
+                else if (s === 'ransomlook') { label = 'RLook'; cls = 'ransomlook'; }
+                else if (s === 'watchguard') { label = 'WatchGuard'; cls = 'watchguard'; }
+                else if (s.startsWith('github:')) { label = s.substring(7); cls = 'github'; }
+                return `<span class="source-tag ${cls}">${esc(label)}</span>`;
+            }).join(' ');
 
             return `
-                <div class="source-section">
-                    <div class="source-section-title">📂 ${esc(cleanSrcName)}</div>
-                    <div class="links-grid-container">
-                        <div class="links-column online-column">
-                            <div class="column-header online">🟢 Online Links (${online.length})</div>
-                            <div class="url-list">
-                                ${onlineRows}
-                            </div>
-                        </div>
-                        <div class="links-column offline-column">
-                            <div class="column-header offline">🔴 Offline Links (${offline.length})</div>
-                            <div class="url-list">
-                                ${offlineRows}
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <tr>
+                    <td class="nested-url-cell">
+                        <span class="url-dot ${isOnline ? 'online' : 'offline'}"></span>
+                        <a href="${esc(u.url)}" target="_blank" class="nested-link">${esc(u.url)}</a>
+                        <button class="copy-url-btn" onclick="copyToClipboard('${esc(u.url)}', this); event.stopPropagation();" title="Copy URL">📋</button>
+                    </td>
+                    <td>
+                        <span class="status-indicator ${isOnline ? 'online' : 'offline'}">
+                            <span class="status-pip ${isOnline ? 'online' : 'offline'}"></span>
+                            ${isOnline ? 'Online' : 'Offline'}
+                        </span>
+                    </td>
+                    <td><div class="source-tags">${urlSourceBadges}</div></td>
+                    <td class="last-visit-cell">${esc(u.last_visit) || 'N/A'}</td>
+                </tr>
             `;
         }).join('');
 
-        return `
-            <div class="entity-card" data-key="${esc(e.key)}">
-                <div class="entity-card-header" onclick="toggleCard(this)">
-                    <div class="entity-name-area">
-                        <span class="expand-arrow">▶</span>
-                        <span class="entity-name">${esc(e.name)}</span>
-                        <div class="source-tags">${sourceTags}</div>
+        const detailsRowHtml = `
+            <tr class="details-row" id="details-${esc(e.key)}">
+                <td colspan="6">
+                    <div class="details-content">
+                        <table class="nested-links-table">
+                            <thead>
+                                <tr>
+                                    <th>Onion URL / Invite Link</th>
+                                    <th>Status</th>
+                                    <th>Discovered Sources</th>
+                                    <th>Last Visited</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${nestedRowsHtml || '<tr><td colspan="4" class="no-urls-placeholder">No links matching the active filters.</td></tr>'}
+                            </tbody>
+                        </table>
                     </div>
-                    <div class="entity-meta">
-                        <div class="meta-badge total"><span class="count">${e.total_urls}</span> links</div>
-                        <div class="meta-badge online"><span class="count">${e.online_count}</span> up</div>
-                        <div class="meta-badge offline"><span class="count">${e.offline_count}</span> down</div>
-                        <div class="status-indicator ${statusType}">
-                            <span class="status-pip ${statusType}"></span>
-                            ${statusLabel}
-                        </div>
-                    </div>
-                </div>
-                <div class="entity-card-body">
-                    ${sourceSectionsHtml || '<div class="no-urls-placeholder">No links match selected source filter.</div>'}
-                </div>
-            </div>
+                </td>
+            </tr>
         `;
-    }
 
-    function renderUrlRow(u) {
-        const isOnline = u.status === 'Online';
         return `
-            <div class="url-row">
-                <span class="url-dot ${isOnline ? 'online' : 'offline'}"></span>
-                <span class="url-text">${esc(u.url)}</span>
-            </div>
+            <tr class="entity-row" data-key="${esc(e.key)}" onclick="toggleTableRow('${esc(e.key)}')">
+                <td class="arrow-cell"><span class="expand-arrow">▶</span></td>
+                <td class="name-cell"><strong>${esc(e.name)}</strong></td>
+                <td><span class="sector-badge ${sectorClass}">${sectorLabel}</span></td>
+                <td>
+                    <div class="status-indicator ${statusType}">
+                        <span class="status-pip ${statusType}"></span>
+                        ${statusLabel}
+                    </div>
+                </td>
+                <td><div class="source-tags">${sourceTags}</div></td>
+                <td>
+                    <div class="links-counter-badge">
+                        <span class="online-count">${onlineCount}</span> / <span class="total-count">${totalCount}</span> active
+                    </div>
+                </td>
+            </tr>
+            ${detailsRowHtml}
         `;
     }
 
@@ -604,9 +666,30 @@
     }
 
     // ═══ EXPAND/COLLAPSE ═══
-    window.toggleCard = function (headerEl) {
-        const card = headerEl.closest('.entity-card');
-        if (card) card.classList.toggle('expanded');
+    window.toggleTableRow = function(key) {
+        const row = document.querySelector(`.entity-row[data-key="${key}"]`);
+        const detailsRow = document.getElementById(`details-${key}`);
+        if (row && detailsRow) {
+            const isExpanded = row.classList.toggle('expanded');
+            if (isExpanded) {
+                detailsRow.classList.add('visible');
+            } else {
+                detailsRow.classList.remove('visible');
+            }
+        }
+    };
+
+    // ═══ COPY UTILS ═══
+    window.copyToClipboard = function(text, btn) {
+        navigator.clipboard.writeText(text).then(() => {
+            const oldText = btn.textContent;
+            btn.textContent = '✅';
+            setTimeout(() => {
+                btn.textContent = oldText;
+            }, 1000);
+        }).catch(err => {
+            console.error('Failed to copy: ', err);
+        });
     };
 
     // ═══ UTILS ═══

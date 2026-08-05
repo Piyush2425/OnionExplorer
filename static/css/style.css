@@ -569,39 +569,220 @@ body::after {
 .source-tag.ransomware-live { background: var(--accent-purple-dim); color: var(--accent-purple); }
 .source-tag.watchguard { background: var(--accent-orange-dim); color: var(--accent-orange); }
 
-/* ---------- URL List (inside entity card) ---------- */
-.entity-card-body {
-    display: none;
-    border-top: 1px solid var(--border-subtle);
+/* ---------- Unified Directory Table Styles ---------- */
+.table-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+    margin-bottom: 30px;
+    animation: fadeIn var(--transition-medium) ease-out;
 }
 
-.entity-card.expanded .entity-card-body {
-    display: block;
+.table-container {
+    overflow-x: auto;
+    width: 100%;
 }
 
-.url-list {
-    padding: 8px 12px;
+.unified-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    font-size: 0.85rem;
 }
 
-.url-row {
-    display: grid;
-    grid-template-columns: 18px 1fr auto auto;
-    align-items: center;
-    gap: 10px;
-    padding: 6px 10px;
-    border-radius: var(--radius-sm);
+.unified-table th {
+    background: rgba(255, 255, 255, 0.02);
+    border-bottom: 1px solid var(--border-medium);
+    padding: 14px 18px;
+    font-weight: 600;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.unified-table td {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-primary);
+    vertical-align: middle;
+}
+
+.entity-row {
+    cursor: pointer;
     transition: background var(--transition-fast);
 }
 
-.url-row:hover {
-    background: var(--bg-url-row-hover);
+.entity-row:hover {
+    background: rgba(0, 212, 255, 0.02);
+}
+
+.entity-row.expanded {
+    background: rgba(0, 212, 255, 0.03);
+}
+
+.entity-row.expanded td {
+    border-bottom-color: transparent;
+}
+
+/* Expand Arrow animation */
+.arrow-cell {
+    text-align: center;
+}
+
+.expand-arrow {
+    display: inline-block;
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    transition: transform var(--transition-fast);
+}
+
+.entity-row.expanded .expand-arrow {
+    transform: rotate(90deg);
+    color: var(--accent-cyan);
+}
+
+/* Sector Badge Style */
+.sector-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.sector-badge.group { background: rgba(0, 212, 255, 0.08); color: var(--accent-cyan); }
+.sector-badge.market { background: rgba(186, 85, 211, 0.08); color: var(--accent-purple); }
+.sector-badge.telegram { background: rgba(30, 144, 255, 0.08); color: #1e90ff; }
+
+/* Link Count Badge */
+.links-counter-badge {
+    background: rgba(255, 255, 255, 0.04);
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 0.78rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    border: 1px solid var(--border-subtle);
+}
+
+.links-counter-badge .online-count {
+    color: var(--accent-green);
+}
+
+.links-counter-badge .total-count {
+    color: var(--text-secondary);
+}
+
+/* Dropdown Accordion Row */
+.details-row {
+    display: none;
+    background: rgba(0, 0, 0, 0.15);
+}
+
+.details-row.visible {
+    display: table-row;
+}
+
+.details-content {
+    padding: 0 18px 18px 18px;
+    animation: fadeIn var(--transition-fast) ease-out;
+}
+
+/* Nested Links Table */
+.nested-links-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: rgba(255, 255, 255, 0.01);
+    border: 1px solid var(--border-medium);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    font-size: 0.8rem;
+}
+
+.nested-links-table th {
+    background: rgba(255, 255, 255, 0.015);
+    border-bottom: 1px solid var(--border-medium);
+    padding: 10px 14px;
+    font-size: 0.73rem;
+    color: var(--text-muted);
+}
+
+.nested-links-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.nested-links-table tr:last-child td {
+    border-bottom: none;
+}
+
+.nested-url-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.nested-link {
+    font-family: var(--font-mono);
+    color: var(--text-secondary);
+    text-decoration: none;
+    word-break: break-all;
+    transition: color var(--transition-fast);
+}
+
+.nested-link:hover {
+    color: var(--accent-cyan);
+}
+
+.copy-url-btn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 0.8rem;
+    padding: 2px 4px;
+    border-radius: 4px;
+    transition: background var(--transition-fast);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.copy-url-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+/* Specific Cell formatting */
+.last-visit-cell {
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+}
+
+.no-urls-placeholder {
+    color: var(--text-muted);
+    font-style: italic;
+    text-align: center;
+    padding: 14px;
+}
+
+.no-results-cell, .loading-cell {
+    text-align: center;
+    padding: 60px 20px !important;
+}
+
+.loading-cell .spinner {
+    margin: 0 auto 12px auto;
 }
 
 .url-dot {
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    justify-self: center;
+    display: inline-block;
 }
 
 .url-dot.online {
@@ -613,44 +794,6 @@ body::after {
     background: var(--accent-red);
     opacity: 0.6;
 }
-
-.url-text {
-    font-family: var(--font-mono);
-    font-size: 0.74rem;
-    color: var(--text-secondary);
-    word-break: break-all;
-    line-height: 1.4;
-}
-
-.url-status-text {
-    font-size: 0.65rem;
-    font-weight: 600;
-    font-family: var(--font-mono);
-    padding: 2px 8px;
-    border-radius: 6px;
-}
-
-.url-status-text.online {
-    color: var(--accent-green);
-    background: var(--accent-green-dim);
-}
-
-.url-status-text.offline {
-    color: var(--accent-red);
-    background: var(--accent-red-dim);
-}
-
-.url-source {
-    font-size: 0.6rem;
-    font-weight: 700;
-    padding: 2px 6px;
-    border-radius: 4px;
-    text-transform: uppercase;
-}
-
-.url-source.ransomfeed { background: var(--accent-cyan-dim); color: var(--accent-cyan); }
-.url-source.ransomlook { background: var(--accent-green-dim); color: var(--accent-green); }
-.url-source.ransomware-live { background: var(--accent-purple-dim); color: var(--accent-purple); }
 
 /* ---------- No Results ---------- */
 .no-results {

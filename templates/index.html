@@ -78,7 +78,11 @@
         <!-- ═══ TABS + FILTERS ═══ -->
         <section class="controls-bar">
             <div class="tab-group">
-                <button class="tab active" data-tab="forums_groups" id="tabGroups">
+                <button class="tab active" data-tab="all_sectors" id="tabAll">
+                    <span class="tab-icon">🌐</span> All Sectors
+                    <span class="tab-count" id="tabAllCount">0</span>
+                </button>
+                <button class="tab" data-tab="forums_groups" id="tabGroups">
                     <span class="tab-icon">👥</span> Forums & Groups
                     <span class="tab-count" id="tabGroupsCount">0</span>
                 </button>
@@ -136,11 +140,29 @@
             <button class="clear-search-btn" id="clearSearchBtn">✕ Clear Search</button>
         </div>
 
-        <!-- ═══ ENTITY LIST ═══ -->
-        <section class="entity-list" id="entityList">
-            <div class="loading-overlay">
-                <div class="spinner"></div>
-                <div class="loading-text">Loading threat intelligence data...</div>
+        <!-- ═══ UNIFIED THREAT DIRECTORY TABLE ═══ -->
+        <section class="table-card">
+            <div class="table-container">
+                <table class="unified-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 40px;"></th>
+                            <th>Threat Actor / Entity</th>
+                            <th>Sector / Type</th>
+                            <th>Combined Status</th>
+                            <th>Sources</th>
+                            <th>Link Count</th>
+                        </tr>
+                    </thead>
+                    <tbody id="unifiedTableBody">
+                        <tr>
+                            <td colspan="6" class="loading-cell">
+                                <div class="spinner"></div>
+                                <div class="loading-text">Loading threat intelligence data...</div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </section>
 
