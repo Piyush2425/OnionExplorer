@@ -147,7 +147,7 @@ def build_unified_data_from_files():
     markets = {}
     telegram_links = {}
 
-    # ── 1. RansomFeed URLs (all are groups) ──
+    # ── 1. RansomFeed URLs (JSON & CSV fallback) ──
     rf_data = load_json_safe(RANSOMFEED_URLS_JSON)
     if rf_data and isinstance(rf_data, dict):
         for group_name, urls_list in rf_data.items():
@@ -163,6 +163,26 @@ def build_unified_data_from_files():
                     "source": "ransomfeed",
                     "version": u.get("version", "")
                 })
+    else:
+        # Fallback to CSV if JSON is missing/empty
+        rf_csv = os.path.join(DATA_DIR, "ransomfeed_all_source_urls.csv")
+        rf_rows = load_csv_as_dicts(rf_csv)
+        for row in rf_rows:
+            group_name = row.get("group", "").strip()
+            url_val = row.get("url", "").strip()
+            if not group_name or not url_val:
+                continue
+            key = group_name.lower().strip()
+            if key not in forums_groups:
+                forums_groups[key] = make_entity(group_name)
+            if "ransomfeed" not in forums_groups[key]["sources"]:
+                forums_groups[key]["sources"].append("ransomfeed")
+            forums_groups[key]["urls"].append({
+                "url": url_val,
+                "status": row.get("status", "Unknown"),
+                "source": "ransomfeed",
+                "version": row.get("version", "")
+            })
 
     # ── 2. RansomFeed Stats ──
     stats_rows = load_csv_as_dicts(RANSOMFEED_STATS_CSV)
@@ -304,10 +324,14 @@ def build_unified_data_from_files():
                     "url_type": "market"
                 })
 
-    # ── 9. WatchGuard Scraped Data ──
-    wg_data = load_json_safe(WATCHGUARD_JSON)
-    if wg_data and isinstance(wg_data, list):
-        for item in wg_data:
+    # ── 9. WatchGuard Scraped Data (JSON & CSV fallback) ──
+    wg_items = load_json_safe(WATCHGUARD_JSON)
+    if not wg_items:
+        wg_csv = os.path.join(DATA_DIR, "watchguard_ransomware.csv")
+        wg_items = load_csv_as_dicts(wg_csv)
+
+    if wg_items and isinstance(wg_items, list):
+        for item in wg_items:
             gname = item.get("group_name", "").strip()
             if not gname:
                 continue
@@ -318,23 +342,27 @@ def build_unified_data_from_files():
                 forums_groups[key]["sources"].append("watchguard")
             
             # Map stats
-            forums_groups[key]["stats"]["watchguard_status"] = item.get("status", "Inactive")
+            forums_groups[key]["stats"]["watchguard_status"] = item.get("status", item.get("is_active", "Inactive"))
             if item.get("first_seen_display"):
                 forums_groups[key]["stats"]["first_seen"] = item.get("first_seen_display")
             if item.get("last_seen_display"):
                 forums_groups[key]["stats"]["last_seen"] = item.get("last_seen_display")
 
-            onions = item.get("onion_links", [])
+            onions_raw = item.get("onion_links", [])
+            if isinstance(onions_raw, str):
+                onions = [x.strip() for x in re.split(r'[,|;\s]+', onions_raw) if x.strip() and x.strip().lower() != "none"]
+            elif isinstance(onions_raw, list):
+                onions = [str(x).strip() for x in onions_raw if x and str(x).strip().lower() != "none"]
+            else:
+                onions = []
+
             for o in onions:
-                if not o or o.lower() == "none":
-                    continue
                 u_str = o.strip()
                 if not u_str.startswith("http"):
                     u_str = "http://" + u_str
                 # Avoid duplicates
                 if not any(existing_u.get("url") == u_str and existing_u.get("source") == "watchguard" for existing_u in forums_groups[key]["urls"]):
-                    # Show onion link status as "Online" if group is Active, otherwise Offline
-                    status_val = "Online" if item.get("status") == "Active" else "Offline"
+                    status_val = "Online" if str(item.get("status", "")).lower() == "active" or str(item.get("is_active", "")).lower() == "true" or str(item.get("is_active", "")).lower() == "active" else "Offline"
                     forums_groups[key]["urls"].append({
                         "url": u_str,
                         "status": status_val,

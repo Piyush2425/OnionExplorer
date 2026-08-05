@@ -1,6 +1,6 @@
 """
-WatchGuard Ransomware Tracker Scraper
-======================================
+WatchGuard Ransomware Tracker Scraper (High-Speed Multi-Threaded Edition)
+==========================================================================
 Scrapes all ransomware groups from:
   https://www.watchguard.com/wgrd-security-hub/ransomware-tracker
 
@@ -23,6 +23,7 @@ import json
 import csv
 import time
 import logging
+import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from selenium import webdriver
@@ -31,7 +32,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from selenium.common.exceptions import TimeoutException
 from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 
@@ -133,7 +134,7 @@ def scrape_listing_table(driver: webdriver.Chrome) -> list[dict]:
             # Ransomware type cell
             ransomware_type = cells[2].get_text(strip=True)
 
-            # First Seen (datetime attribute gives ISO format)
+            # First Seen
             first_seen_tag = cells[3].find("time")
             first_seen = first_seen_tag.get("datetime", "") if first_seen_tag else ""
             first_seen_display = first_seen_tag.get_text(strip=True) if first_seen_tag else ""
@@ -167,53 +168,48 @@ def scrape_listing_table(driver: webdriver.Chrome) -> list[dict]:
             break
 
         page += 1
-        time.sleep(1.5)
+        time.sleep(0.5)
 
     log.info(f"✅ Total groups scraped from listing: {len(groups)}")
     return groups
 
 
-# ─── Phase 2: Scrape detail page for a single group ──────────────────────────
-def scrape_group_detail(driver: webdriver.Chrome, group: dict) -> dict:
+# ─── Phase 2: Scrape detail page concurrently for a single group ────────────
+def scrape_group_detail_fast(group: dict) -> dict:
     """
-    Visit a group's detail page and extract onion links, emails, and Telegram links.
-    Updates the group dict in-place.
+    Fast concurrent scraper using requests for a single group detail page.
+    Extracts onion links, emails, and Telegram handles.
     """
+    url = group["group_url"]
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+    }
+
     try:
-        driver.get(group["group_url"])
-        WebDriverWait(driver, 12).until(
-            EC.presence_of_element_located((By.TAG_NAME, "body"))
-        )
-        time.sleep(2)
+        resp = requests.get(url, headers=headers, timeout=12)
+        if resp.status_code == 200:
+            html = resp.text
+            soup = BeautifulSoup(html, "html.parser")
+            body_text = soup.get_text()
 
-        body_text = driver.find_element(By.TAG_NAME, "body").text
-        page_source = driver.page_source
+            # Extract onion links (from text and raw HTML)
+            onion_matches = set(ONION_PATTERN.findall(body_text)) | set(ONION_PATTERN.findall(html))
+            onions = [o for o in onion_matches if len(o.split(".onion")[0]) >= 16]
 
-        # Extract onion links (from both visible text and source)
-        onion_matches = set(ONION_PATTERN.findall(body_text)) | set(ONION_PATTERN.findall(page_source))
-        # Filter out obviously non-onion false positives
-        onions = [o for o in onion_matches if len(o.split(".onion")[0]) >= 16]
+            # Extract emails
+            emails = [
+                e for e in set(EMAIL_PATTERN.findall(body_text))
+                if "watchguard" not in e.lower() and "example" not in e.lower()
+            ]
 
-        # Extract emails (filter out watchguard.com domains)
-        emails = [
-            e for e in set(EMAIL_PATTERN.findall(body_text))
-            if "watchguard" not in e.lower() and "example" not in e.lower()
-        ]
+            # Extract Telegram links
+            telegrams = list(set(TELEGRAM_PATTERN.findall(body_text)))
 
-        # Extract Telegram links
-        telegrams = list(set(TELEGRAM_PATTERN.findall(body_text)))
-
-        group["onion_links"] = onions
-        group["emails"] = emails
-        group["telegram_links"] = telegrams
-
-        log.info(
-            f"  ✔ {group['group_name']}: "
-            f"{len(onions)} onion(s), {len(emails)} email(s), {len(telegrams)} telegram(s)"
-        )
-
+            group["onion_links"] = onions
+            group["emails"] = emails
+            group["telegram_links"] = telegrams
     except Exception as e:
-        log.error(f"  ✗ Failed to scrape detail for {group['group_name']}: {e}")
+        log.error(f"  ✗ Detail fetch error for {group['group_name']}: {e}")
 
     return group
 
@@ -250,18 +246,22 @@ def main():
     driver = make_driver()
 
     try:
-        # Phase 1: Get all group metadata from listing pages
+        # Phase 1: Get all group metadata from listing pages via Selenium
         groups = scrape_listing_table(driver)
 
         if not groups:
             log.warning("No groups found. Exiting.")
             return
 
-        # Phase 2: Visit each detail page to extract onion links
-        log.info(f"\n🔍 Scraping detail pages for {len(groups)} groups...")
-        for idx, group in enumerate(groups, 1):
-            log.info(f"  [{idx}/{len(groups)}] {group['group_name']}")
-            scrape_group_detail(driver, group)
+        # Phase 2: Visit each detail page concurrently with 25 parallel threads
+        log.info(f"\n🔍 Concurrently scraping detail pages for {len(groups)} groups...")
+        with ThreadPoolExecutor(max_workers=25) as executor:
+            futures = [executor.submit(scrape_group_detail_fast, group) for group in groups]
+            completed_count = 0
+            for future in as_completed(futures):
+                completed_count += 1
+                if completed_count % 50 == 0 or completed_count == len(groups):
+                    log.info(f"  Progress: [{completed_count}/{len(groups)}] group detail pages completed.")
 
         # Phase 3: Save both JSON and CSV
         save_outputs(groups)
