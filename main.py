@@ -33,7 +33,7 @@ from flask import Flask, render_template, jsonify, request, make_response
 # Import threat location library
 from onion_explorer import ThreatLocationClient
 from onion_explorer.exporters import export_to_json, export_to_csv
-from monitors import ransomfeed, ransomelook, ransomelive, github_feed, telegram_checker, watchguard
+from monitors import ransomfeed, ransomelook, ransomelive, github_feed, telegram_checker, watchguard, validator
 
 # ---------- Configuration ----------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -676,6 +676,28 @@ def api_data():
     """Full unified dataset with groups and markets separated."""
     data = build_unified_data()
     return jsonify(data)
+
+
+@app.route("/api/scan", methods=["POST"])
+def api_scan():
+    """Scan an onion URL using Tor proxy and take a screenshot."""
+    try:
+        req_data = request.get_json()
+        if not req_data or "url" not in req_data:
+            return jsonify({"error": "Missing 'url' parameter"}), 400
+        
+        url = req_data.get("url")
+        if not url.endswith(".onion") and ".onion" not in url:
+            return jsonify({"error": "Only .onion URLs are allowed"}), 400
+            
+        result = validator.scan_onion_url(url)
+        if result.get("success"):
+            return jsonify(result)
+        else:
+            return jsonify(result), 500
+    except Exception as e:
+        log.error(f"Scan endpoint error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 def sanitize_csv_cell(value):
