@@ -444,35 +444,48 @@ def sync_data_to_database():
             
         if batch:
             database.save_entities_batch(batch)
+            database.save_meta(data.get("meta", {}))
+            log.info(f"Database sync complete. Synced {len(batch)} entities.")
+        else:
+            log.info("Database sync skipped: no entities found in batch.")
             
-        # Save metadata
-        database.save_meta(data.get("meta", {}))
-        log.info(f"Database sync complete. Synced {len(batch)} entities.")
-        
-        # Clean up temporary JSON/CSV cache files to save space and rely on structured DB
+        # Clean up temporary raw cache files safely
         cleanup_raw_data_files()
     except Exception as e:
         log.error(f"Failed to sync data to database: {e}")
 
 
 def cleanup_raw_data_files():
-    """Delete raw JSON feed cache files from data/ directory to preserve cleanliness but keep CSV files."""
+    """Clean up only temporary extraction cache files while protecting essential feed JSONs and databases."""
     import glob
-    log.info("Cleaning up temporary raw JSON feed cache files from data/...")
-    patterns = [
-        os.path.join(DATA_DIR, "*.json"),
+    log.info("Cleaning up temporary raw cache files from data/...")
+    # Do NOT delete persistent DBs, configs, or source feed JSONs
+    protected_files = {
+        "config.json",
+        "verified_links.json",
+        "scan_results.json",
+        "all_threat_locations.json",
+        "github_forums_groups.json",
+        "github_markets.json",
+        "github_telegram_links.json",
+        "ransomfeed_all_source_urls.json",
+        "ransomlook_groups.json",
+        "ransomlook_markets.json",
+        "ransomware_live_locations.json",
+        "watchguard_ransomware.json"
+    }
+    
+    # Only clean temporary intermediate extraction files if present
+    temp_files = [
+        os.path.join(DATA_DIR, "github_feed_extracted.json")
     ]
-    for pattern in patterns:
-        for filepath in glob.glob(pattern):
-            filename = os.path.basename(filepath)
-            # EXCLUDE config.json
-            if filename in ("config.json",):
-                continue
+    for filepath in temp_files:
+        if os.path.exists(filepath):
             try:
                 os.remove(filepath)
-                log.info(f"Deleted raw cache file: {filename}")
+                log.info(f"Deleted temp cache file: {os.path.basename(filepath)}")
             except Exception as e:
-                log.warn(f"Failed to delete {filename}: {e}")
+                log.warn(f"Failed to delete {filepath}: {e}")
 
 
 def build_stats(data):
@@ -543,44 +556,41 @@ def run_all_scrapers():
         # 1. Run GitHubFeed first (instantaneous extraction)
         try:
             run_scraper("GitHubFeed", github_feed.scrape_and_save_github_feeds)
-            sync_data_to_database()
         except Exception as e:
             log.error(f"GitHubFeed error: {e}")
 
         # 2. Run TelegramChecker (checks telegram invite link validity)
         try:
             run_scraper("TelegramChecker", lambda: telegram_checker.check_all_telegram_links(GITHUB_TELEGRAM_JSON))
-            sync_data_to_database()
         except Exception as e:
             log.error(f"TelegramChecker error: {e}")
 
         # 3. RansomFeed legacy fallback
         try:
             run_scraper("RansomFeed", ransomfeed.main)
-            sync_data_to_database()
         except Exception as e:
             log.error(f"RansomFeed run error: {e}")
 
         # 4. RansomLook (async)
         try:
             run_scraper("RansomLook", lambda: asyncio.run(ransomelook.main()))
-            sync_data_to_database()
         except Exception as e:
             log.error(f"RansomLook run error: {e}")
 
         # 5. RansomwareLive
         try:
             run_scraper("RansomwareLive", ransomelive.main)
-            sync_data_to_database()
         except Exception as e:
             log.error(f"RansomwareLive run error: {e}")
 
         # 6. WatchGuard
         try:
             run_scraper("WatchGuard", watchguard.main)
-            sync_data_to_database()
         except Exception as e:
             log.error(f"WatchGuard run error: {e}")
+
+        # Sync all scraped feed data to the database ONCE after all scrapers complete
+        sync_data_to_database()
 
         # 6. Library unified export
         try:
