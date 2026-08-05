@@ -938,6 +938,38 @@ body::after {
     background: rgba(0, 242, 254, 0.08);
 }
 
+/* ---------- Scrape All Sources Action Button ---------- */
+.scrape-all-btn {
+    background: linear-gradient(135deg, var(--accent-cyan), #0072ff);
+    color: #000;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 8px 16px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 4px 15px rgba(0, 242, 254, 0.25);
+    transition: all var(--transition-fast);
+    white-space: nowrap;
+}
+
+.scrape-all-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(0, 242, 254, 0.4);
+    filter: brightness(1.1);
+}
+
+.scrape-all-btn:disabled {
+    background: var(--border-subtle);
+    color: var(--text-muted);
+    box-shadow: none;
+    cursor: not-allowed;
+    transform: none;
+}
+
 /* ---------- Theme Toggle & Scraper Config ---------- */
 .theme-toggle-btn, .settings-btn {
     background: rgba(255, 255, 255, 0.05);

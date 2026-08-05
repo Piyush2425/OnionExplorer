@@ -17,6 +17,7 @@
     let currentSort = 'name-asc';
     let currentSourceFilter = 'all';
     let searchQuery = '';
+    let wasScraping = false;
 
     // ═══ INIT ═══
     document.addEventListener('DOMContentLoaded', async () => {
@@ -53,16 +54,31 @@
             updateScrapeStatus(meta);
             
             const runScrapeBtn = document.getElementById('runScrapeBtn');
+            const mainScrapeBtn = document.getElementById('mainScrapeBtn');
+
             if (meta.is_running) {
+                wasScraping = true;
                 if (runScrapeBtn) {
                     runScrapeBtn.disabled = true;
                     runScrapeBtn.textContent = '🔄 Scraper Running...';
                 }
+                if (mainScrapeBtn) {
+                    mainScrapeBtn.disabled = true;
+                    mainScrapeBtn.textContent = '🔄 Scraping All Sources...';
+                }
                 setTimeout(checkScraperStatus, 3000);
             } else {
+                if (wasScraping) {
+                    wasScraping = false;
+                    await loadData();
+                }
                 if (runScrapeBtn) {
                     runScrapeBtn.disabled = false;
                     runScrapeBtn.textContent = '🔄 Scrape Now';
+                }
+                if (mainScrapeBtn) {
+                    mainScrapeBtn.disabled = false;
+                    mainScrapeBtn.textContent = '⚡ Scrape All Sources';
                 }
             }
         } catch (err) {
@@ -148,6 +164,26 @@
 
     // ═══ EVENTS ═══
     function bindEvents() {
+        // Main Scrape All Button
+        const mainScrapeBtn = document.getElementById('mainScrapeBtn');
+        if (mainScrapeBtn) {
+            mainScrapeBtn.addEventListener('click', async () => {
+                try {
+                    mainScrapeBtn.disabled = true;
+                    mainScrapeBtn.textContent = '🔄 Scraping All Sources...';
+                    const resp = await fetch('/api/scraper/run', { method: 'POST' });
+                    const res = await resp.json();
+                    if (res.status === 'started' || res.status === 'already_running') {
+                        checkScraperStatus();
+                    }
+                } catch (err) {
+                    console.error('Failed to trigger scrape:', err);
+                    mainScrapeBtn.disabled = false;
+                    mainScrapeBtn.textContent = '⚡ Scrape All Sources';
+                }
+            });
+        }
+
         // Search
         const searchInput = document.getElementById('searchInput');
         let debounce;
