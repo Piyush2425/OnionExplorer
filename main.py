@@ -28,12 +28,13 @@ import importlib
 import asyncio
 import io
 from datetime import datetime, timedelta
-from flask import Flask, render_template, jsonify, request, make_response
+from flask import Flask, render_template, jsonify, request, make_response, send_from_directory
+from flask_cors import CORS
 
 # Import threat location library
 from onion_explorer import ThreatLocationClient
 from onion_explorer.exporters import export_to_json, export_to_csv
-from monitors import ransomfeed, ransomelook, ransomelive, github_feed, telegram_checker, watchguard, validator
+from monitors import ransomfeed, ransomelook, ransomelive, github_feed, telegram_checker, watchguard, validator, batch_scanner
 
 # ---------- Configuration ----------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -73,7 +74,8 @@ logging.basicConfig(
 log = logging.getLogger("OnionExplorer")
 
 # ---------- Flask App ----------
-app = Flask(__name__)
+app = Flask(__name__, static_folder="frontend/dist/assets", template_folder="frontend/dist")
+CORS(app)
 
 # ---------- Scraper State ----------
 scraper_state = {
@@ -668,8 +670,18 @@ def start_background_scraper():
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    try:
+        return render_template("index.html")
+    except:
+        return "React app is not built yet. Run 'npm run build' inside frontend directory.", 404
 
+@app.route("/<path:path>")
+def serve_static_or_catchall(path):
+    # If the file exists in the build dir, serve it. Otherwise serve index.html (React router)
+    build_dir = os.path.join(BASE_DIR, "frontend", "dist")
+    if os.path.exists(os.path.join(build_dir, path)):
+        return send_from_directory(build_dir, path)
+    return render_template("index.html")
 
 @app.route("/api/data")
 def api_data():
@@ -698,6 +710,40 @@ def api_scan():
     except Exception as e:
         log.error(f"Scan endpoint error: {e}")
         return jsonify({"error": str(e)}), 500
+
+@app.route("/api/batch_scan", methods=["POST"])
+def api_batch_scan():
+    """Trigger a batch scan of all known onion URLs using Playwright."""
+    try:
+        # For this prototype we will run it synchronously, but it should ideally be a background task
+        # Collect all urls
+        data = build_unified_data()
+        urls_to_scan = []
+        for c_name in ["forums_groups", "markets"]:
+            collection = data.get(c_name, {})
+            for key, entity in collection.items():
+                for u in entity.get("urls", []):
+                    if u.get("status") == "Online" and ".onion" in u.get("url", ""):
+                        urls_to_scan.append(u.get("url"))
+                        
+        # Deduplicate
+        urls_to_scan = list(set(urls_to_scan))
+        
+        # Start a thread so we don't block the API
+        def scan_thread():
+            batch_scanner.run_batch_scan(urls_to_scan)
+            
+        threading.Thread(target=scan_thread, daemon=True).start()
+        
+        return jsonify({"message": f"Started batch scan for {len(urls_to_scan)} URLs in the background."})
+    except Exception as e:
+        log.error(f"Batch scan trigger error: {e}")
+        return jsonify({"error": str(e)}), 500
+        
+@app.route("/api/scan_results")
+def api_scan_results():
+    """Return the current batch scan database."""
+    return jsonify(batch_scanner.load_db())
 
 
 def sanitize_csv_cell(value):
