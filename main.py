@@ -55,6 +55,8 @@ GITHUB_TELEGRAM_JSON = os.path.join(DATA_DIR, "github_telegram_links.json")
 GITHUB_FORUMS_JSON = os.path.join(DATA_DIR, "github_forums_groups.json")
 GITHUB_MARKETS_JSON = os.path.join(DATA_DIR, "github_markets.json")
 WATCHGUARD_JSON = os.path.join(DATA_DIR, "watchguard_ransomware.json")
+VERIFIED_LINKS_JSON = os.path.join(DATA_DIR, "verified_links.json")
+WORKING_LINKS_CSV = os.path.join(DATA_DIR, "working_links.csv")
 
 # ---------- Logging ----------
 os.makedirs(os.path.join(DATA_DIR, "logs"), exist_ok=True)
@@ -607,11 +609,83 @@ def run_all_scrapers():
             scraper_state["is_running"] = False
 
 
+def load_verified_links():
+    """Load analyst verified links database."""
+    if os.path.exists(VERIFIED_LINKS_JSON):
+        try:
+            with open(VERIFIED_LINKS_JSON, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            log.error(f"Failed to load verified_links.json: {e}")
+    return {}
+
+
+def generate_working_links_csv(verified_data=None):
+    """Generate and save working_links.csv containing analyst-verified working links and comments."""
+    if verified_data is None:
+        verified_data = load_verified_links()
+        
+    unified = build_unified_data()
+    url_meta = {}
+    
+    for sector_name, collection in [("Group/Forum", unified.get("forums_groups", {})), 
+                                    ("Market", unified.get("markets", {})), 
+                                    ("Telegram", unified.get("telegram_links", {}))]:
+        for entity_key, entity in collection.items():
+            name = entity.get("name", entity_key)
+            sources = ", ".join(entity.get("sources", []))
+            for u in entity.get("urls", []):
+                url_str = u.get("url", "").strip()
+                if url_str:
+                    url_meta[url_str] = {
+                        "name": name,
+                        "sector": sector_name,
+                        "sources": sources,
+                        "status": u.get("status", "Unknown"),
+                        "last_visit": u.get("last_visit", "")
+                    }
+                    
+    rows = []
+    for url, info in verified_data.items():
+        if info.get("verified"):
+            meta = url_meta.get(url, {})
+            rows.append({
+                "Entity Name": sanitize_csv_cell(meta.get("name", "Unknown")),
+                "Sector": sanitize_csv_cell(meta.get("sector", "Unknown")),
+                "Onion URL / Link": sanitize_csv_cell(url),
+                "Feed Status": sanitize_csv_cell(meta.get("status", "Unknown")),
+                "Verified Working": "YES",
+                "Analyst Comment": sanitize_csv_cell(info.get("comment", "")),
+                "Sources": sanitize_csv_cell(meta.get("sources", "")),
+                "Updated At": sanitize_csv_cell(info.get("updated_at", ""))
+            })
+            
+    fieldnames = ["Entity Name", "Sector", "Onion URL / Link", "Feed Status", "Verified Working", "Analyst Comment", "Sources", "Updated At"]
+    try:
+        with open(WORKING_LINKS_CSV, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+        log.info(f"Generated working_links.csv with {len(rows)} verified working links.")
+    except Exception as e:
+        log.error(f"Failed to generate working_links.csv: {e}")
+
+
+def save_verified_links(data_dict):
+    """Save analyst verified links dict to disk and re-generate working_links.csv."""
+    try:
+        with open(VERIFIED_LINKS_JSON, "w", encoding="utf-8") as f:
+            json.dump(data_dict, f, indent=4)
+        generate_working_links_csv(data_dict)
+    except Exception as e:
+        log.error(f"Failed to save verified_links.json: {e}")
+
+
 def apscheduler_scraper_job():
     """Wrapper for scheduled scraper runs to calculate the next execution time and run scrapers."""
     log.info("APScheduler triggered scraper run...")
     run_all_scrapers()
-    
+
     interval = scraper_state["interval_minutes"]
     next_time = datetime.now() + timedelta(minutes=interval)
     with state_lock:
@@ -621,16 +695,6 @@ def apscheduler_scraper_job():
 
 def start_background_scraper():
     """Initialize and start the APScheduler background thread."""
-    has_existing_data = False
-    try:
-        data = build_unified_data()
-        if data.get("forums_groups") or data.get("markets") or data.get("telegram_links"):
-            # Check that there's actual data entries
-            if len(data.get("forums_groups", {})) > 0 or len(data.get("markets", {})) > 0 or len(data.get("telegram_links", {})) > 0:
-                has_existing_data = True
-    except Exception as e:
-        log.warning(f"Failed to check existing database records: {e}")
-
     with state_lock:
         scraper_state["next_scrape"] = "Calculating..."
         for fp in [RANSOMFEED_URLS_JSON, RANSOMLOOK_GROUPS_JSON, RANSOMWARE_LIVE_JSON]:
@@ -649,19 +713,12 @@ def start_background_scraper():
     )
     scheduler.start()
     
-    if has_existing_data:
-        # DB has data, skip initial run and schedule next run time based on interval
-        next_time = datetime.now() + timedelta(minutes=scraper_state["interval_minutes"])
-        with state_lock:
-            scraper_state["next_scrape"] = next_time.strftime("%Y-%m-%d %H:%M:%S")
-        log.info(f"Database has existing threat intelligence data. Skipping initial startup scrape. Next run scheduled at {next_time.strftime('%Y-%m-%d %H:%M:%S')}")
-    else:
-        # DB is empty, trigger an immediate initial run to scrape feeds
-        with state_lock:
-            scraper_state["next_scrape"] = "Immediate scrape in progress..."
-        init_thread = threading.Thread(target=apscheduler_scraper_job, daemon=True, name="InitialScrape")
-        init_thread.start()
-        log.info(f"Database is empty. Triggering immediate startup scrape in background...")
+    # Trigger an immediate initial run to scrape feeds fast on startup
+    with state_lock:
+        scraper_state["next_scrape"] = "Immediate scrape in progress..."
+    init_thread = threading.Thread(target=apscheduler_scraper_job, daemon=True, name="InitialScrape")
+    init_thread.start()
+    log.info("Triggering immediate startup feed scrape in background...")
 
 
 # ═══════════════════════════════════════════════
@@ -744,6 +801,47 @@ def api_batch_scan():
 def api_scan_results():
     """Return the current batch scan database."""
     return jsonify(batch_scanner.load_db())
+
+
+@app.route("/api/verified_links", methods=["GET"])
+def api_verified_links():
+    """Return all analyst verified links data."""
+    return jsonify(load_verified_links())
+
+
+@app.route("/api/verify_link", methods=["POST"])
+def api_verify_link():
+    """Update analyst verification status and comment for a link."""
+    try:
+        req_data = request.get_json() or {}
+        url = req_data.get("url")
+        if not url:
+            return jsonify({"error": "Missing 'url' parameter"}), 400
+            
+        verified_data = load_verified_links()
+        verified = bool(req_data.get("verified", False))
+        comment = str(req_data.get("comment", "")).strip()
+        
+        verified_data[url] = {
+            "verified": verified,
+            "comment": comment,
+            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        
+        save_verified_links(verified_data)
+        return jsonify({"success": True, "url": url, "verified_info": verified_data[url]})
+    except Exception as e:
+        log.error(f"Error updating verify_link: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/export/working_links_csv", methods=["GET"])
+def api_export_working_links_csv():
+    """Download working_links.csv containing analyst-verified active threat links."""
+    generate_working_links_csv()
+    if not os.path.exists(WORKING_LINKS_CSV):
+        return jsonify({"error": "working_links.csv not found"}), 444
+    return send_from_directory(DATA_DIR, "working_links.csv", as_attachment=True)
 
 
 def sanitize_csv_cell(value):

@@ -9,6 +9,7 @@ function App() {
   const [data, setData] = useState(null);
   const [stats, setStats] = useState(null);
   const [scanResults, setScanResults] = useState({});
+  const [verifiedLinks, setVerifiedLinks] = useState({});
   const [loading, setLoading] = useState(true);
   const [currentTab, setCurrentTab] = useState('all_sectors');
   const [searchQuery, setSearchQuery] = useState('');
@@ -17,6 +18,7 @@ function App() {
   useEffect(() => {
     fetchData();
     fetchScanResults();
+    fetchVerifiedLinks();
     const interval = setInterval(fetchScanResults, 5000);
     return () => clearInterval(interval);
   }, []);
@@ -45,6 +47,15 @@ function App() {
     }
   };
 
+  const fetchVerifiedLinks = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/verified_links`);
+      setVerifiedLinks(res.data || {});
+    } catch (error) {
+      console.error('Error fetching verified links:', error);
+    }
+  };
+
   const startBatchScan = async () => {
     if (!confirm('Start batch Tor scanning? This will take a while.')) return;
     setIsBatchScanning(true);
@@ -55,6 +66,10 @@ function App() {
       alert('Failed to start batch scan.');
     }
     setTimeout(() => setIsBatchScanning(false), 3000);
+  };
+
+  const handleDownloadWorkingLinks = () => {
+    window.open(`${API_BASE}/export/working_links_csv`, '_blank');
   };
 
   if (loading || !data) {
@@ -88,14 +103,23 @@ function App() {
     );
   }
 
+  const verifiedCount = Object.values(verifiedLinks).filter(v => v.verified).length;
+
   return (
     <div className="dark-theme" style={{ minHeight: '100vh', backgroundColor: 'var(--bg-main)' }}>
       <header className="top-header">
         <div className="header-left">
           <h1>🧅 OnionExplorer V2</h1>
-          <span className="version-badge">React Native</span>
+          <span className="version-badge">Threat Intel</span>
         </div>
-        <div className="header-right">
+        <div className="header-right" style={{ display: 'flex', gap: '10px' }}>
+          <button 
+            className="scrape-btn" 
+            style={{ backgroundColor: '#10b981', color: '#fff', fontWeight: 'bold' }} 
+            onClick={handleDownloadWorkingLinks}
+          >
+            📥 Download Working Links CSV ({verifiedCount})
+          </button>
           <button className="scrape-btn" onClick={startBatchScan} disabled={isBatchScanning}>
             {isBatchScanning ? 'Starting...' : '🔄 Run Batch Tor Scan'}
           </button>
@@ -115,6 +139,10 @@ function App() {
           <div className="stat-card telegram">
             <div className="stat-title">Telegram Links</div>
             <div className="stat-value">{allTelegramLinks.length}</div>
+          </div>
+          <div className="stat-card verified" style={{ background: 'var(--bg-card)', border: '1px solid #10b981', borderRadius: '12px', padding: '15px' }}>
+            <div className="stat-title" style={{ color: '#10b981' }}>Verified Working Links</div>
+            <div className="stat-value" style={{ color: '#10b981', fontSize: '1.8rem', fontWeight: 'bold' }}>{verifiedCount}</div>
           </div>
         </div>
 
@@ -137,7 +165,13 @@ function App() {
         </div>
 
         <div className="table-card">
-          <UnifiedTable data={displayData} scanResults={scanResults} API_BASE={API_BASE} />
+          <UnifiedTable 
+            data={displayData} 
+            scanResults={scanResults} 
+            verifiedLinks={verifiedLinks}
+            setVerifiedLinks={setVerifiedLinks}
+            API_BASE={API_BASE} 
+          />
         </div>
       </main>
     </div>
