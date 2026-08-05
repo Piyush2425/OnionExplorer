@@ -542,17 +542,36 @@ def build_stats(data):
 
 
 # ═══════════════════════════════════════════════
-#  BACKGROUND SCRAPER
+#  BACKGROUND SCRAPER & LIVE LOGS
 # ═══════════════════════════════════════════════
 
+recent_scraper_logs = []
+
+def add_log_entry(msg, level="INFO"):
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    entry = {"time": timestamp, "message": msg, "level": level}
+    with state_lock:
+        recent_scraper_logs.append(entry)
+        if len(recent_scraper_logs) > 80:
+            recent_scraper_logs.pop(0)
+
+def log_event(msg, level="INFO"):
+    if level == "ERROR":
+        log.error(msg)
+    elif level == "WARNING":
+        log.warning(msg)
+    else:
+        log.info(msg)
+    add_log_entry(msg, level)
+
 def run_scraper(name, scraper_fn):
-    """Run a single scraper with error handling."""
+    """Run a single scraper with error handling and log capture."""
     try:
-        log.info(f"  Running {name}...")
+        log_event(f"🚀 Starting {name} scraper...")
         scraper_fn()
-        log.info(f"  {name} completed.")
+        log_event(f"✅ {name} scraper completed successfully.")
     except Exception as e:
-        log.error(f"  {name} failed: {e}")
+        log_event(f"❌ {name} scraper failed: {e}", level="ERROR")
 
 
 def run_all_scrapers():
@@ -560,8 +579,8 @@ def run_all_scrapers():
     with state_lock:
         scraper_state["is_running"] = True
 
-    log.info("=" * 50)
-    log.info("Starting scheduled scrape via onion_explorer library...")
+    log_event("=" * 50)
+    log_event("🚀 Starting full darkweb scrape cycle across all sources...")
     start = time.time()
     try:
         # 1. Run GitHubFeed first (instantaneous extraction)
@@ -569,55 +588,56 @@ def run_all_scrapers():
             run_scraper("GitHubFeed", github_feed.scrape_and_save_github_feeds)
             sync_data_to_database()
         except Exception as e:
-            log.error(f"GitHubFeed error: {e}")
+            log_event(f"GitHubFeed error: {e}", level="ERROR")
 
         # 2. Run TelegramChecker (checks telegram invite link validity)
         try:
             run_scraper("TelegramChecker", lambda: telegram_checker.check_all_telegram_links(GITHUB_TELEGRAM_JSON))
             sync_data_to_database()
         except Exception as e:
-            log.error(f"TelegramChecker error: {e}")
+            log_event(f"TelegramChecker error: {e}", level="ERROR")
 
         # 3. RansomFeed legacy fallback
         try:
             run_scraper("RansomFeed", ransomfeed.main)
             sync_data_to_database()
         except Exception as e:
-            log.error(f"RansomFeed run error: {e}")
+            log_event(f"RansomFeed run error: {e}", level="ERROR")
 
         # 4. RansomLook (async)
         try:
             run_scraper("RansomLook", lambda: asyncio.run(ransomelook.main()))
             sync_data_to_database()
         except Exception as e:
-            log.error(f"RansomLook run error: {e}")
+            log_event(f"RansomLook run error: {e}", level="ERROR")
 
         # 5. RansomwareLive
         try:
             run_scraper("RansomwareLive", ransomelive.main)
             sync_data_to_database()
         except Exception as e:
-            log.error(f"RansomwareLive run error: {e}")
+            log_event(f"RansomwareLive run error: {e}", level="ERROR")
 
         # 6. WatchGuard
         try:
             run_scraper("WatchGuard", watchguard.main)
             sync_data_to_database()
         except Exception as e:
-            log.error(f"WatchGuard run error: {e}")
+            log_event(f"WatchGuard run error: {e}", level="ERROR")
 
-        # 6. Library unified export
+        # 7. Library unified export
         try:
             client = ThreatLocationClient()
             locations = client.fetch_all_locations()
             export_to_json(locations, os.path.join(DATA_DIR, "all_threat_locations.json"))
             export_to_csv(locations, os.path.join(DATA_DIR, "all_threat_locations.csv"))
-            log.info(f"onion_explorer library unified dataset exported: {len(locations)} locations (JSON & CSV)")
+            log_event(f"📦 Unified dataset exported: {len(locations)} threat locations (JSON & CSV)")
         except Exception as e:
-            log.error(f"onion_explorer unified export error: {e}")
+            log_event(f"Unified export error: {e}", level="ERROR")
 
         elapsed = time.time() - start
-        log.info(f"All scrapers finished in {elapsed:.1f}s")
+        log_event(f"✨ All darkweb scrapers finished successfully in {elapsed:.1f} seconds!")
+        log_event("=" * 50)
 
         with state_lock:
             scraper_state["last_scrape"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -917,6 +937,13 @@ def api_scraper_status():
     """Return scraper state."""
     with state_lock:
         return jsonify(scraper_state)
+
+
+@app.route("/api/scraper/logs")
+def api_scraper_logs():
+    """Return recent in-memory scraper logs."""
+    with state_lock:
+        return jsonify(recent_scraper_logs)
 
 
 @app.route("/api/scraper/run", methods=["POST"])

@@ -32,6 +32,8 @@
         await loadData();
         await loadScraperConfig();
         checkScraperStatus();
+        fetchLogs();
+        setInterval(fetchLogs, 2500);
     });
 
     async function loadScraperConfig() {
@@ -47,11 +49,49 @@
         }
     }
 
+    async function fetchLogs() {
+        try {
+            const resp = await fetch('/api/scraper/logs');
+            const logs = await resp.json();
+            renderLogs(logs);
+        } catch (err) {
+            console.log('Failed to fetch logs:', err);
+        }
+    }
+
+    function renderLogs(logs) {
+        const body = document.getElementById('logConsoleBody');
+        const pulse = document.getElementById('logPulse');
+        if (!body) return;
+
+        if (logs.length === 0) return;
+
+        body.innerHTML = logs.map(l => {
+            let cls = 'info';
+            if (l.level === 'ERROR') cls = 'error';
+            else if (l.level === 'WARNING') cls = 'warning';
+            else if (l.message.includes('completed') || l.message.includes('finished') || l.message.includes('exported') || l.message.includes('successfully')) cls = 'success';
+
+            return `<div class="log-line ${cls}"><span class="log-time">[${esc(l.time)}]</span> ${esc(l.message)}</div>`;
+        }).join('');
+
+        body.scrollTop = body.scrollHeight;
+
+        if (pulse) {
+            if (wasScraping) {
+                pulse.classList.add('active');
+            } else {
+                pulse.classList.remove('active');
+            }
+        }
+    }
+
     async function checkScraperStatus() {
         try {
             const resp = await fetch('/api/scraper/status');
             const meta = await resp.json();
             updateScrapeStatus(meta);
+            fetchLogs();
             
             const runScrapeBtn = document.getElementById('runScrapeBtn');
             const mainScrapeBtn = document.getElementById('mainScrapeBtn');
@@ -66,11 +106,12 @@
                     mainScrapeBtn.disabled = true;
                     mainScrapeBtn.textContent = '🔄 Scraping All Sources...';
                 }
-                setTimeout(checkScraperStatus, 3000);
+                setTimeout(checkScraperStatus, 2500);
             } else {
                 if (wasScraping) {
                     wasScraping = false;
                     await loadData();
+                    fetchLogs();
                 }
                 if (runScrapeBtn) {
                     runScrapeBtn.disabled = false;
@@ -164,6 +205,26 @@
 
     // ═══ EVENTS ═══
     function bindEvents() {
+        // Log console clear & toggle
+        const clearLogsBtn = document.getElementById('clearLogsBtn');
+        if (clearLogsBtn) {
+            clearLogsBtn.addEventListener('click', () => {
+                const body = document.getElementById('logConsoleBody');
+                if (body) body.innerHTML = '<div class="log-line info"><span class="log-time">[System]</span> Log window cleared.</div>';
+            });
+        }
+
+        const toggleLogsBtn = document.getElementById('toggleLogsBtn');
+        if (toggleLogsBtn) {
+            toggleLogsBtn.addEventListener('click', () => {
+                const body = document.getElementById('logConsoleBody');
+                if (body) {
+                    const isCollapsed = body.classList.toggle('collapsed');
+                    toggleLogsBtn.textContent = isCollapsed ? '▶ Expand' : '🔽 Collapse';
+                }
+            });
+        }
+
         // Main Scrape All Button
         const mainScrapeBtn = document.getElementById('mainScrapeBtn');
         if (mainScrapeBtn) {
