@@ -28,13 +28,12 @@ import importlib
 import asyncio
 import io
 from datetime import datetime, timedelta
-from flask import Flask, render_template, jsonify, request, make_response, send_from_directory
-from flask_cors import CORS
+from flask import Flask, render_template, jsonify, request, make_response
 
 # Import threat location library
 from onion_explorer import ThreatLocationClient
 from onion_explorer.exporters import export_to_json, export_to_csv
-from monitors import ransomfeed, ransomelook, ransomelive, github_feed, telegram_checker, watchguard, validator, batch_scanner
+from monitors import ransomfeed, ransomelook, ransomelive, github_feed, telegram_checker, watchguard
 
 # ---------- Configuration ----------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -55,8 +54,6 @@ GITHUB_TELEGRAM_JSON = os.path.join(DATA_DIR, "github_telegram_links.json")
 GITHUB_FORUMS_JSON = os.path.join(DATA_DIR, "github_forums_groups.json")
 GITHUB_MARKETS_JSON = os.path.join(DATA_DIR, "github_markets.json")
 WATCHGUARD_JSON = os.path.join(DATA_DIR, "watchguard_ransomware.json")
-VERIFIED_LINKS_JSON = os.path.join(DATA_DIR, "verified_links.json")
-WORKING_LINKS_CSV = os.path.join(DATA_DIR, "working_links.csv")
 
 # ---------- Logging ----------
 os.makedirs(os.path.join(DATA_DIR, "logs"), exist_ok=True)
@@ -76,8 +73,7 @@ logging.basicConfig(
 log = logging.getLogger("OnionExplorer")
 
 # ---------- Flask App ----------
-app = Flask(__name__, static_folder="frontend/dist/assets", template_folder="frontend/dist")
-CORS(app)
+app = Flask(__name__)
 
 # ---------- Scraper State ----------
 scraper_state = {
@@ -444,48 +440,35 @@ def sync_data_to_database():
             
         if batch:
             database.save_entities_batch(batch)
-            database.save_meta(data.get("meta", {}))
-            log.info(f"Database sync complete. Synced {len(batch)} entities.")
-        else:
-            log.info("Database sync skipped: no entities found in batch.")
             
-        # Clean up temporary raw cache files safely
+        # Save metadata
+        database.save_meta(data.get("meta", {}))
+        log.info(f"Database sync complete. Synced {len(batch)} entities.")
+        
+        # Clean up temporary JSON/CSV cache files to save space and rely on structured DB
         cleanup_raw_data_files()
     except Exception as e:
         log.error(f"Failed to sync data to database: {e}")
 
 
 def cleanup_raw_data_files():
-    """Clean up only temporary extraction cache files while protecting essential feed JSONs and databases."""
+    """Delete raw JSON feed cache files from data/ directory to preserve cleanliness but keep CSV files."""
     import glob
-    log.info("Cleaning up temporary raw cache files from data/...")
-    # Do NOT delete persistent DBs, configs, or source feed JSONs
-    protected_files = {
-        "config.json",
-        "verified_links.json",
-        "scan_results.json",
-        "all_threat_locations.json",
-        "github_forums_groups.json",
-        "github_markets.json",
-        "github_telegram_links.json",
-        "ransomfeed_all_source_urls.json",
-        "ransomlook_groups.json",
-        "ransomlook_markets.json",
-        "ransomware_live_locations.json",
-        "watchguard_ransomware.json"
-    }
-    
-    # Only clean temporary intermediate extraction files if present
-    temp_files = [
-        os.path.join(DATA_DIR, "github_feed_extracted.json")
+    log.info("Cleaning up temporary raw JSON feed cache files from data/...")
+    patterns = [
+        os.path.join(DATA_DIR, "*.json"),
     ]
-    for filepath in temp_files:
-        if os.path.exists(filepath):
+    for pattern in patterns:
+        for filepath in glob.glob(pattern):
+            filename = os.path.basename(filepath)
+            # EXCLUDE config.json
+            if filename in ("config.json",):
+                continue
             try:
                 os.remove(filepath)
-                log.info(f"Deleted temp cache file: {os.path.basename(filepath)}")
+                log.info(f"Deleted raw cache file: {filename}")
             except Exception as e:
-                log.warn(f"Failed to delete {filepath}: {e}")
+                log.warn(f"Failed to delete {filename}: {e}")
 
 
 def build_stats(data):
@@ -556,41 +539,44 @@ def run_all_scrapers():
         # 1. Run GitHubFeed first (instantaneous extraction)
         try:
             run_scraper("GitHubFeed", github_feed.scrape_and_save_github_feeds)
+            sync_data_to_database()
         except Exception as e:
             log.error(f"GitHubFeed error: {e}")
 
         # 2. Run TelegramChecker (checks telegram invite link validity)
         try:
             run_scraper("TelegramChecker", lambda: telegram_checker.check_all_telegram_links(GITHUB_TELEGRAM_JSON))
+            sync_data_to_database()
         except Exception as e:
             log.error(f"TelegramChecker error: {e}")
 
         # 3. RansomFeed legacy fallback
         try:
             run_scraper("RansomFeed", ransomfeed.main)
+            sync_data_to_database()
         except Exception as e:
             log.error(f"RansomFeed run error: {e}")
 
         # 4. RansomLook (async)
         try:
             run_scraper("RansomLook", lambda: asyncio.run(ransomelook.main()))
+            sync_data_to_database()
         except Exception as e:
             log.error(f"RansomLook run error: {e}")
 
         # 5. RansomwareLive
         try:
             run_scraper("RansomwareLive", ransomelive.main)
+            sync_data_to_database()
         except Exception as e:
             log.error(f"RansomwareLive run error: {e}")
 
         # 6. WatchGuard
         try:
             run_scraper("WatchGuard", watchguard.main)
+            sync_data_to_database()
         except Exception as e:
             log.error(f"WatchGuard run error: {e}")
-
-        # Sync all scraped feed data to the database ONCE after all scrapers complete
-        sync_data_to_database()
 
         # 6. Library unified export
         try:
@@ -619,83 +605,11 @@ def run_all_scrapers():
             scraper_state["is_running"] = False
 
 
-def load_verified_links():
-    """Load analyst verified links database."""
-    if os.path.exists(VERIFIED_LINKS_JSON):
-        try:
-            with open(VERIFIED_LINKS_JSON, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            log.error(f"Failed to load verified_links.json: {e}")
-    return {}
-
-
-def generate_working_links_csv(verified_data=None):
-    """Generate and save working_links.csv containing analyst-verified working links and comments."""
-    if verified_data is None:
-        verified_data = load_verified_links()
-        
-    unified = build_unified_data()
-    url_meta = {}
-    
-    for sector_name, collection in [("Group/Forum", unified.get("forums_groups", {})), 
-                                    ("Market", unified.get("markets", {})), 
-                                    ("Telegram", unified.get("telegram_links", {}))]:
-        for entity_key, entity in collection.items():
-            name = entity.get("name", entity_key)
-            sources = ", ".join(entity.get("sources", []))
-            for u in entity.get("urls", []):
-                url_str = u.get("url", "").strip()
-                if url_str:
-                    url_meta[url_str] = {
-                        "name": name,
-                        "sector": sector_name,
-                        "sources": sources,
-                        "status": u.get("status", "Unknown"),
-                        "last_visit": u.get("last_visit", "")
-                    }
-                    
-    rows = []
-    for url, info in verified_data.items():
-        if info.get("verified"):
-            meta = url_meta.get(url, {})
-            rows.append({
-                "Entity Name": sanitize_csv_cell(meta.get("name", "Unknown")),
-                "Sector": sanitize_csv_cell(meta.get("sector", "Unknown")),
-                "Onion URL / Link": sanitize_csv_cell(url),
-                "Feed Status": sanitize_csv_cell(meta.get("status", "Unknown")),
-                "Verified Working": "YES",
-                "Analyst Comment": sanitize_csv_cell(info.get("comment", "")),
-                "Sources": sanitize_csv_cell(meta.get("sources", "")),
-                "Updated At": sanitize_csv_cell(info.get("updated_at", ""))
-            })
-            
-    fieldnames = ["Entity Name", "Sector", "Onion URL / Link", "Feed Status", "Verified Working", "Analyst Comment", "Sources", "Updated At"]
-    try:
-        with open(WORKING_LINKS_CSV, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(rows)
-        log.info(f"Generated working_links.csv with {len(rows)} verified working links.")
-    except Exception as e:
-        log.error(f"Failed to generate working_links.csv: {e}")
-
-
-def save_verified_links(data_dict):
-    """Save analyst verified links dict to disk and re-generate working_links.csv."""
-    try:
-        with open(VERIFIED_LINKS_JSON, "w", encoding="utf-8") as f:
-            json.dump(data_dict, f, indent=4)
-        generate_working_links_csv(data_dict)
-    except Exception as e:
-        log.error(f"Failed to save verified_links.json: {e}")
-
-
 def apscheduler_scraper_job():
     """Wrapper for scheduled scraper runs to calculate the next execution time and run scrapers."""
     log.info("APScheduler triggered scraper run...")
     run_all_scrapers()
-
+    
     interval = scraper_state["interval_minutes"]
     next_time = datetime.now() + timedelta(minutes=interval)
     with state_lock:
@@ -705,6 +619,16 @@ def apscheduler_scraper_job():
 
 def start_background_scraper():
     """Initialize and start the APScheduler background thread."""
+    has_existing_data = False
+    try:
+        data = build_unified_data()
+        if data.get("forums_groups") or data.get("markets") or data.get("telegram_links"):
+            # Check that there's actual data entries
+            if len(data.get("forums_groups", {})) > 0 or len(data.get("markets", {})) > 0 or len(data.get("telegram_links", {})) > 0:
+                has_existing_data = True
+    except Exception as e:
+        log.warning(f"Failed to check existing database records: {e}")
+
     with state_lock:
         scraper_state["next_scrape"] = "Calculating..."
         for fp in [RANSOMFEED_URLS_JSON, RANSOMLOOK_GROUPS_JSON, RANSOMWARE_LIVE_JSON]:
@@ -723,12 +647,19 @@ def start_background_scraper():
     )
     scheduler.start()
     
-    # Trigger an immediate initial run to scrape feeds fast on startup
-    with state_lock:
-        scraper_state["next_scrape"] = "Immediate scrape in progress..."
-    init_thread = threading.Thread(target=apscheduler_scraper_job, daemon=True, name="InitialScrape")
-    init_thread.start()
-    log.info("Triggering immediate startup feed scrape in background...")
+    if has_existing_data:
+        # DB has data, skip initial run and schedule next run time based on interval
+        next_time = datetime.now() + timedelta(minutes=scraper_state["interval_minutes"])
+        with state_lock:
+            scraper_state["next_scrape"] = next_time.strftime("%Y-%m-%d %H:%M:%S")
+        log.info(f"Database has existing threat intelligence data. Skipping initial startup scrape. Next run scheduled at {next_time.strftime('%Y-%m-%d %H:%M:%S')}")
+    else:
+        # DB is empty, trigger an immediate initial run to scrape feeds
+        with state_lock:
+            scraper_state["next_scrape"] = "Immediate scrape in progress..."
+        init_thread = threading.Thread(target=apscheduler_scraper_job, daemon=True, name="InitialScrape")
+        init_thread.start()
+        log.info(f"Database is empty. Triggering immediate startup scrape in background...")
 
 
 # ═══════════════════════════════════════════════
@@ -737,121 +668,14 @@ def start_background_scraper():
 
 @app.route("/")
 def index():
-    try:
-        return render_template("index.html")
-    except:
-        return "React app is not built yet. Run 'npm run build' inside frontend directory.", 404
-
-@app.route("/<path:path>")
-def serve_static_or_catchall(path):
-    # If the file exists in the build dir, serve it. Otherwise serve index.html (React router)
-    build_dir = os.path.join(BASE_DIR, "frontend", "dist")
-    if os.path.exists(os.path.join(build_dir, path)):
-        return send_from_directory(build_dir, path)
     return render_template("index.html")
+
 
 @app.route("/api/data")
 def api_data():
     """Full unified dataset with groups and markets separated."""
     data = build_unified_data()
     return jsonify(data)
-
-
-@app.route("/api/scan", methods=["POST"])
-def api_scan():
-    """Scan an onion URL using Tor proxy and take a screenshot."""
-    try:
-        req_data = request.get_json()
-        if not req_data or "url" not in req_data:
-            return jsonify({"error": "Missing 'url' parameter"}), 400
-        
-        url = req_data.get("url")
-        if not url.endswith(".onion") and ".onion" not in url:
-            return jsonify({"error": "Only .onion URLs are allowed"}), 400
-            
-        result = validator.scan_onion_url(url)
-        if result.get("success"):
-            return jsonify(result)
-        else:
-            return jsonify(result), 500
-    except Exception as e:
-        log.error(f"Scan endpoint error: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/api/batch_scan", methods=["POST"])
-def api_batch_scan():
-    """Trigger a batch scan of all known onion URLs using Playwright."""
-    try:
-        # For this prototype we will run it synchronously, but it should ideally be a background task
-        # Collect all urls
-        data = build_unified_data()
-        urls_to_scan = []
-        for c_name in ["forums_groups", "markets"]:
-            collection = data.get(c_name, {})
-            for key, entity in collection.items():
-                for u in entity.get("urls", []):
-                    if u.get("status") == "Online" and ".onion" in u.get("url", ""):
-                        urls_to_scan.append(u.get("url"))
-                        
-        # Deduplicate
-        urls_to_scan = list(set(urls_to_scan))
-        
-        # Start a thread so we don't block the API
-        def scan_thread():
-            batch_scanner.run_batch_scan(urls_to_scan)
-            
-        threading.Thread(target=scan_thread, daemon=True).start()
-        
-        return jsonify({"message": f"Started batch scan for {len(urls_to_scan)} URLs in the background."})
-    except Exception as e:
-        log.error(f"Batch scan trigger error: {e}")
-        return jsonify({"error": str(e)}), 500
-        
-@app.route("/api/scan_results")
-def api_scan_results():
-    """Return the current batch scan database."""
-    return jsonify(batch_scanner.load_db())
-
-
-@app.route("/api/verified_links", methods=["GET"])
-def api_verified_links():
-    """Return all analyst verified links data."""
-    return jsonify(load_verified_links())
-
-
-@app.route("/api/verify_link", methods=["POST"])
-def api_verify_link():
-    """Update analyst verification status and comment for a link."""
-    try:
-        req_data = request.get_json() or {}
-        url = req_data.get("url")
-        if not url:
-            return jsonify({"error": "Missing 'url' parameter"}), 400
-            
-        verified_data = load_verified_links()
-        verified = bool(req_data.get("verified", False))
-        comment = str(req_data.get("comment", "")).strip()
-        
-        verified_data[url] = {
-            "verified": verified,
-            "comment": comment,
-            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }
-        
-        save_verified_links(verified_data)
-        return jsonify({"success": True, "url": url, "verified_info": verified_data[url]})
-    except Exception as e:
-        log.error(f"Error updating verify_link: {e}")
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/api/export/working_links_csv", methods=["GET"])
-def api_export_working_links_csv():
-    """Download working_links.csv containing analyst-verified active threat links."""
-    generate_working_links_csv()
-    if not os.path.exists(WORKING_LINKS_CSV):
-        return jsonify({"error": "working_links.csv not found"}), 444
-    return send_from_directory(DATA_DIR, "working_links.csv", as_attachment=True)
 
 
 def sanitize_csv_cell(value):

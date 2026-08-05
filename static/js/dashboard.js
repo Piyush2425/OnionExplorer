@@ -595,17 +595,12 @@
                 return `<span class="source-tag ${cls}">${esc(label)}</span>`;
             }).join(' ');
 
-            const isTelegram = e.type === 'telegram' || e.sector === 'telegram_links';
-            const showScanBtn = isOnline && !isTelegram;
-            const scanBtnHtml = showScanBtn ? `<button class="scan-url-btn" onclick="scanUrl('${esc(u.url)}', this); event.stopPropagation();" title="Scan with Tor">🔍 Scan</button>` : '';
-
             return `
                 <tr>
                     <td class="nested-url-cell">
                         <span class="url-dot ${isOnline ? 'online' : 'offline'}"></span>
                         <a href="${esc(u.url)}" target="_blank" class="nested-link">${esc(u.url)}</a>
                         <button class="copy-url-btn" onclick="copyToClipboard('${esc(u.url)}', this); event.stopPropagation();" title="Copy URL">📋</button>
-                        ${scanBtnHtml}
                     </td>
                     <td>
                         <span class="status-indicator ${isOnline ? 'online' : 'offline'}">
@@ -673,24 +668,14 @@
     // ═══ EXPAND/COLLAPSE ═══
     window.toggleTableRow = function(key) {
         const row = document.querySelector(`.entity-row[data-key="${key}"]`);
-        const details = document.getElementById(`details-${key}`);
-        if (!row || !details) return;
-
-        const isExpanded = row.classList.contains('expanded');
-        row.classList.toggle('expanded', !isExpanded);
-        
-        if (!isExpanded) {
-            details.style.display = 'table-row';
-            // Slight delay for CSS transition to trigger
-            setTimeout(() => {
-                details.classList.add('show');
-            }, 10);
-        } else {
-            details.classList.remove('show');
-            // Wait for transition to finish
-            setTimeout(() => {
-                details.style.display = 'none';
-            }, 300);
+        const detailsRow = document.getElementById(`details-${key}`);
+        if (row && detailsRow) {
+            const isExpanded = row.classList.toggle('expanded');
+            if (isExpanded) {
+                detailsRow.classList.add('visible');
+            } else {
+                detailsRow.classList.remove('visible');
+            }
         }
     };
 
@@ -706,60 +691,6 @@
             console.error('Failed to copy: ', err);
         });
     };
-
-    window.scanUrl = async function(url, btnEl) {
-        if (btnEl.disabled) return;
-        
-        const origText = btnEl.innerHTML;
-        btnEl.disabled = true;
-        btnEl.innerHTML = '<span class="spinner"></span> Scanning...';
-        
-        try {
-            const resp = await fetch('/api/scan', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: url })
-            });
-            const data = await resp.json();
-            
-            if (data.success && data.screenshot_path) {
-                showScreenshotModal(data.screenshot_path, url);
-            } else {
-                alert('Scan failed: ' + (data.error || 'Unknown error'));
-            }
-        } catch (err) {
-            console.error(err);
-            alert('Scan request failed. Is Tor proxy running?');
-        } finally {
-            btnEl.disabled = false;
-            btnEl.innerHTML = origText;
-        }
-    };
-
-    function showScreenshotModal(imagePath, url) {
-        let modal = document.getElementById('screenshotModal');
-        if (!modal) {
-            modal = document.createElement('div');
-            modal.id = 'screenshotModal';
-            modal.className = 'modal-overlay';
-            modal.innerHTML = `
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h3 id="modalTitle">Scan Result</h3>
-                        <button class="modal-close" onclick="document.getElementById('screenshotModal').style.display='none'">&times;</button>
-                    </div>
-                    <div class="modal-body">
-                        <img id="modalImage" src="" alt="Screenshot" />
-                    </div>
-                </div>
-            `;
-            document.body.appendChild(modal);
-        }
-        
-        document.getElementById('modalTitle').textContent = 'Scan Result: ' + url;
-        document.getElementById('modalImage').src = imagePath;
-        modal.style.display = 'flex';
-    }
 
     // ═══ UTILS ═══
     function esc(str) {
