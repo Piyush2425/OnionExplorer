@@ -75,7 +75,9 @@ logging.basicConfig(
 log = logging.getLogger("OnionExplorer")
 
 # ---------- Flask App ----------
+from flask_cors import CORS
 app = Flask(__name__)
+CORS(app)
 
 # ---------- Scraper State ----------
 scraper_state = {
@@ -718,7 +720,20 @@ def start_background_scraper():
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return jsonify({
+        "name": "OnionExplorer Threat Intelligence API",
+        "status": "active",
+        "version": "2.0.0",
+        "endpoints": {
+            "unified_data": "/api/data",
+            "statistics": "/api/stats",
+            "logs_stream": "/api/scraper/logs",
+            "scraper_status": "/api/scraper/status",
+            "scraper_trigger": "/api/scraper/run",
+            "scraper_config": "/api/config",
+            "screenshot_check": "/api/screenshot/check"
+        }
+    })
 
 
 @app.route("/api/data")
