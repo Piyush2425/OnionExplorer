@@ -1048,6 +1048,28 @@ def api_screenshot_scan_all_online():
     return jsonify({"status": "queued", "count": queued_count})
 
 
+@app.route("/api/url/analyst_update", methods=["POST"])
+def api_url_analyst_update():
+    """Manually update analyst annotations for a specific location link."""
+    req = request.get_json(silent=True) or {}
+    entity_key = req.get("entity_key")
+    url = req.get("url")
+    analyst_working = req.get("analyst_working", False)
+    analyst_notes = req.get("analyst_notes", "")
+    
+    if not entity_key or not url:
+        return jsonify({"error": "Missing entity_key or url"}), 400
+        
+    try:
+        from onion_explorer.database import get_database
+        db = get_database()
+        db.update_analyst_annotations(entity_key, url, analyst_working, analyst_notes)
+        return jsonify({"status": "success"})
+    except Exception as e:
+        log.error(f"Failed to update analyst annotations: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 # ═══════════════════════════════════════════════
 #  ENTRY POINT
 # ═══════════════════════════════════════════════

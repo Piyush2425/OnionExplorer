@@ -71,9 +71,17 @@ class SQLiteIntelDatabase(BaseDatabase):
                 )
             """)
             
-            # Migration check: add screenshot column to locations if missing
+            # Migration check: add screenshot and analyst columns to locations if missing
             try:
                 conn.execute("ALTER TABLE locations ADD COLUMN screenshot TEXT")
+            except sqlite3.OperationalError:
+                pass
+            try:
+                conn.execute("ALTER TABLE locations ADD COLUMN analyst_working INTEGER DEFAULT 0")
+            except sqlite3.OperationalError:
+                pass
+            try:
+                conn.execute("ALTER TABLE locations ADD COLUMN analyst_notes TEXT DEFAULT ''")
             except sqlite3.OperationalError:
                 pass
                 
@@ -93,9 +101,11 @@ class SQLiteIntelDatabase(BaseDatabase):
                     stats = excluded.stats
             """, (key, name, sector, type_val, json.dumps(sources), json.dumps(stats or {})))
 
-            # Fetch existing screenshots to preserve them
-            existing_rows = conn.execute("SELECT url, screenshot FROM locations WHERE entity_key = ?", (key,)).fetchall()
+            # Fetch existing screenshots and analyst notes to preserve them
+            existing_rows = conn.execute("SELECT url, screenshot, analyst_working, analyst_notes FROM locations WHERE entity_key = ?", (key,)).fetchall()
             existing_screenshots = {row["url"]: row["screenshot"] for row in existing_rows if row["screenshot"]}
+            existing_working = {row["url"]: row["analyst_working"] for row in existing_rows if row["analyst_working"] is not None}
+            existing_notes = {row["url"]: row["analyst_notes"] for row in existing_rows if row["analyst_notes"]}
 
             # Clear and rebuild locations to stay fully synchronized with feeds
             conn.execute("DELETE FROM locations WHERE entity_key = ?", (key,))
@@ -103,8 +113,8 @@ class SQLiteIntelDatabase(BaseDatabase):
             for u in urls:
                 url_str = u.get("url", "")
                 conn.execute("""
-                    INSERT OR REPLACE INTO locations (entity_key, url, status, source, fqdn, version, last_visit, server_info, url_type, screenshot)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT OR REPLACE INTO locations (entity_key, url, status, source, fqdn, version, last_visit, server_info, url_type, screenshot, analyst_working, analyst_notes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     key,
                     url_str,
@@ -115,7 +125,9 @@ class SQLiteIntelDatabase(BaseDatabase):
                     u.get("last_visit", ""),
                     u.get("server_info", ""),
                     u.get("url_type", ""),
-                    u.get("screenshot") or existing_screenshots.get(url_str)
+                    u.get("screenshot") or existing_screenshots.get(url_str),
+                    existing_working.get(url_str, 0),
+                    existing_notes.get(url_str, "")
                 ))
             conn.commit()
 
@@ -142,17 +154,19 @@ class SQLiteIntelDatabase(BaseDatabase):
                         stats = excluded.stats
                 """, (key, name, sector, type_val, json.dumps(sources), json.dumps(stats or {})))
 
-                # Fetch existing screenshots to preserve them
-                existing_rows = conn.execute("SELECT url, screenshot FROM locations WHERE entity_key = ?", (key,)).fetchall()
+                # Fetch existing screenshots and analyst notes to preserve them
+                existing_rows = conn.execute("SELECT url, screenshot, analyst_working, analyst_notes FROM locations WHERE entity_key = ?", (key,)).fetchall()
                 existing_screenshots = {row["url"]: row["screenshot"] for row in existing_rows if row["screenshot"]}
+                existing_working = {row["url"]: row["analyst_working"] for row in existing_rows if row["analyst_working"] is not None}
+                existing_notes = {row["url"]: row["analyst_notes"] for row in existing_rows if row["analyst_notes"]}
 
                 conn.execute("DELETE FROM locations WHERE entity_key = ?", (key,))
                 
                 for u in urls:
                     url_str = u.get("url", "")
                     conn.execute("""
-                        INSERT OR REPLACE INTO locations (entity_key, url, status, source, fqdn, version, last_visit, server_info, url_type, screenshot)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        INSERT OR REPLACE INTO locations (entity_key, url, status, source, fqdn, version, last_visit, server_info, url_type, screenshot, analyst_working, analyst_notes)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         key,
                         url_str,
@@ -163,7 +177,9 @@ class SQLiteIntelDatabase(BaseDatabase):
                         u.get("last_visit", ""),
                         u.get("server_info", ""),
                         u.get("url_type", ""),
-                        u.get("screenshot") or existing_screenshots.get(url_str)
+                        u.get("screenshot") or existing_screenshots.get(url_str),
+                        existing_working.get(url_str, 0),
+                        existing_notes.get(url_str, "")
                     ))
             conn.commit()
 
@@ -191,7 +207,9 @@ class SQLiteIntelDatabase(BaseDatabase):
                         "last_visit": l["last_visit"],
                         "server_info": l["server_info"],
                         "url_type": l["url_type"],
-                        "screenshot": l["screenshot"]
+                        "screenshot": l["screenshot"],
+                        "analyst_working": bool(l["analyst_working"]) if "analyst_working" in l.keys() else False,
+                        "analyst_notes": l["analyst_notes"] if "analyst_notes" in l.keys() else ""
                     })
                 
                 on = sum(1 for u in urls_list if u["status"] == "Online")
@@ -251,6 +269,15 @@ class SQLiteIntelDatabase(BaseDatabase):
             """, (screenshot_path, status, entity_key, url))
             conn.commit()
 
+    def update_analyst_annotations(self, entity_key: str, url: str, analyst_working: bool, analyst_notes: str):
+        with self._get_conn() as conn:
+            conn.execute("""
+                UPDATE locations
+                SET analyst_working = ?, analyst_notes = ?
+                WHERE entity_key = ? AND url = ?
+            """, (1 if analyst_working else 0, analyst_notes, entity_key, url))
+            conn.commit()
+
 
 class MongoIntelDatabase(BaseDatabase):
     def __init__(self, connection_uri: str = "mongodb://localhost:27017"):
@@ -262,14 +289,23 @@ class MongoIntelDatabase(BaseDatabase):
     def save_entity(self, key: str, name: str, sector: str, type_val: str, sources: List[str], urls: List[Dict[str, Any]], stats: Dict[str, Any] = None):
         existing = self.db.entities.find_one({"_id": key})
         existing_screenshots = {}
+        existing_working = {}
+        existing_notes = {}
         if existing:
             for u in existing.get("urls", []):
                 if u.get("screenshot"):
                     existing_screenshots[u.get("url")] = u.get("screenshot")
+                if u.get("analyst_working") is not None:
+                    existing_working[u.get("url")] = u.get("analyst_working")
+                if u.get("analyst_notes"):
+                    existing_notes[u.get("url")] = u.get("analyst_notes")
         
         for u in urls:
-            if not u.get("screenshot") and u.get("url") in existing_screenshots:
-                u["screenshot"] = existing_screenshots[u.get("url")]
+            url_str = u.get("url", "")
+            if not u.get("screenshot") and url_str in existing_screenshots:
+                u["screenshot"] = existing_screenshots[url_str]
+            u["analyst_working"] = existing_working.get(url_str, False)
+            u["analyst_notes"] = existing_notes.get(url_str, "")
 
         self.db.entities.replace_one(
             {"_id": key},
@@ -294,14 +330,23 @@ class MongoIntelDatabase(BaseDatabase):
             
             existing = self.db.entities.find_one({"_id": key})
             existing_screenshots = {}
+            existing_working = {}
+            existing_notes = {}
             if existing:
                 for u in existing.get("urls", []):
                     if u.get("screenshot"):
                         existing_screenshots[u.get("url")] = u.get("screenshot")
+                    if u.get("analyst_working") is not None:
+                        existing_working[u.get("url")] = u.get("analyst_working")
+                    if u.get("analyst_notes"):
+                        existing_notes[u.get("url")] = u.get("analyst_notes")
             
             for u in urls:
-                if not u.get("screenshot") and u.get("url") in existing_screenshots:
-                    u["screenshot"] = existing_screenshots[u.get("url")]
+                url_str = u.get("url", "")
+                if not u.get("screenshot") and url_str in existing_screenshots:
+                    u["screenshot"] = existing_screenshots[url_str]
+                u["analyst_working"] = existing_working.get(url_str, False)
+                u["analyst_notes"] = existing_notes.get(url_str, "")
 
             operations.append(
                 pymongo.ReplaceOne(
@@ -327,6 +372,12 @@ class MongoIntelDatabase(BaseDatabase):
             {"$set": {"urls.$.screenshot": screenshot_path, "urls.$.status": status}}
         )
 
+    def update_analyst_annotations(self, entity_key: str, url: str, analyst_working: bool, analyst_notes: str):
+        self.db.entities.update_one(
+            {"_id": entity_key, "urls.url": url},
+            {"$set": {"urls.$.analyst_working": analyst_working, "urls.$.analyst_notes": analyst_notes}}
+        )
+
     def get_unified_data(self) -> Dict[str, Any]:
         forums_groups = {}
         markets = {}
@@ -344,7 +395,14 @@ class MongoIntelDatabase(BaseDatabase):
                 "type": ent.get("type", "group"),
                 "sources": ent.get("sources", []),
                 "stats": ent.get("stats", {}),
-                "urls": urls_list,
+                "urls": [
+                    {
+                        **u,
+                        "analyst_working": u.get("analyst_working", False),
+                        "analyst_notes": u.get("analyst_notes", "")
+                    }
+                    for u in urls_list
+                ],
                 "online_count": on,
                 "offline_count": off,
                 "total_urls": len(urls_list)

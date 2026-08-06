@@ -30,6 +30,7 @@
 	let isLightTheme = $state(true);
 	let isLogsCollapsed = $state(false);
 	let isScanningAll = $state(false);
+	let cacheBuster = $state(Date.now());
 
 	let logsTerminal = $state(null);
 
@@ -144,6 +145,7 @@
 			const res = await fetch('/api/data');
 			if (res.ok) {
 				rawData = await res.json();
+				cacheBuster = Date.now();
 			}
 		} catch (err) {
 			console.error('Failed to load API data:', err);
@@ -262,6 +264,27 @@
 		} catch (err) {
 			console.error('Failed to trigger scan all online:', err);
 			isScanningAll = false;
+		}
+	}
+
+	async function updateAnalystNotes(entityKey, url, analystWorking, analystNotes) {
+		try {
+			const res = await fetch('/api/url/analyst_update', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					entity_key: entityKey,
+					url: url,
+					analyst_working: analystWorking,
+					analyst_notes: analystNotes
+				})
+			});
+			if (res.ok) {
+				// Silently reload data to synchronize local states
+				await loadData();
+			}
+		} catch (err) {
+			console.error('Failed to save analyst annotations:', err);
 		}
 	}
 
@@ -642,8 +665,9 @@
 													<th>Onion URL / Invite Link</th>
 													<th>Status</th>
 													<th>Discovered Sources</th>
-													<th>Last Visited</th>
-													<th style="width: 120px;">Screen</th>
+													<th>Last Checked</th>
+													<th style="width: 140px;">Screen Preview & Date</th>
+													<th style="width: 220px;">Analyst Verification & Notes</th>
 													<th style="width: 100px;">Actions</th>
 												</tr>
 											</thead>
@@ -693,14 +717,38 @@
 																	onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') openScreenshot(u.screenshot, `${ent.name}: ${u.url}`); }}
 																>
 																	<img
-																		src="/static/screenshots/{u.screenshot}"
+																		src="/static/screenshots/{u.screenshot}?t={cacheBuster}"
 																		class="screenshot-thumb"
 																		alt="Preview"
 																	/>
 																</div>
+																<span class="screenshot-date">Saved: {u.last_visit || 'N/A'}</span>
 															{:else}
 																<div class="screenshot-thumb-container" style="cursor: default;">
 																	<div class="screenshot-placeholder">No Preview</div>
+																</div>
+															{/if}
+														</td>
+														<td>
+															{#if isTelegram}
+																<span class="text-muted" style="font-size: 0.75rem; opacity: 0.6;">N/A (Telegram)</span>
+															{:else}
+																<div class="analyst-controls">
+																	<label class="analyst-checkbox-label">
+																		<input
+																			type="checkbox"
+																			checked={u.analyst_working}
+																			onchange={(e) => updateAnalystNotes(ent.key, u.url, e.target.checked, u.analyst_notes)}
+																		/>
+																		<span>Verified Working</span>
+																	</label>
+																	<input
+																		type="text"
+																		value={u.analyst_notes}
+																		placeholder="Notes (e.g. Captcha, DDOS)"
+																		class="analyst-notes-input"
+																		onchange={(e) => updateAnalystNotes(ent.key, u.url, u.analyst_working, e.target.value)}
+																	/>
 																</div>
 															{/if}
 														</td>

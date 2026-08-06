@@ -100,7 +100,7 @@ def make_screenshot_driver(use_tor: bool = True) -> webdriver.Firefox:
     except Exception as gdm_err:
         logger.warning(f"GeckoDriverManager install failed: {gdm_err}. Attempting default system geckodriver path fallback.")
         driver = webdriver.Firefox(options=opts)
-    driver.set_page_load_timeout(60) # Long timeout to allow slow Tor loading
+    driver.set_page_load_timeout(20) # Wait limit of 20 seconds
     return driver
 
 def capture_screenshot_task(entity_key: str, url: str) -> bool:
@@ -119,20 +119,20 @@ def capture_screenshot_task(entity_key: str, url: str) -> bool:
 
     try:
         driver = make_screenshot_driver(use_tor=use_tor)
-        log_worker_event(f"🔍 [Scan] Launching Firefox window for: {url}")
+        log_worker_event(f"🔍 [Scan] Launching Firefox window for: {url} (Group: {entity_key})")
         driver.get(url)
         
-        # Wait exactly 30 seconds for dynamic content to load completely
-        log_worker_event(f"⏳ [Scan] Loaded URL. Waiting 30 seconds for settling: {url}")
-        time.sleep(30)
+        # Wait exactly 20 seconds for dynamic content to load completely
+        log_worker_event(f"⏳ [Scan] Loaded URL. Waiting 20 seconds for settling: {url} (Group: {entity_key})")
+        time.sleep(20)
         
         # Save screenshot
         driver.save_screenshot(save_path)
-        log_worker_event(f"📸 [Scan] Screenshot saved successfully: static/screenshots/{filename}!")
+        log_worker_event(f"📸 [Scan] Screenshot saved successfully: static/screenshots/{filename}! (Group: {entity_key})")
         success = True
         status_val = "Online"
     except WebDriverException as wde:
-        log_worker_event(f"❌ [Scan] Firefox connection error for {url}: {wde}", level="ERROR")
+        log_worker_event(f"❌ [Scan] Firefox connection error for {url} (Group: {entity_key}): {wde}", level="ERROR")
         # Delete stale screenshot on load failure
         if os.path.exists(save_path):
             try:
@@ -140,7 +140,7 @@ def capture_screenshot_task(entity_key: str, url: str) -> bool:
             except Exception:
                 pass
     except Exception as e:
-        log_worker_event(f"❌ [Scan] Error capturing {url}: {e}", level="ERROR")
+        log_worker_event(f"❌ [Scan] Error capturing {url} (Group: {entity_key}): {e}", level="ERROR")
     finally:
         if driver:
             try:
@@ -152,7 +152,7 @@ def capture_screenshot_task(entity_key: str, url: str) -> bool:
     try:
         db = get_database()
         db.update_location_screenshot(entity_key, url, filename if success else None, status_val)
-        log_worker_event(f"💾 [Scan] Updated database status to {status_val} for {url}")
+        log_worker_event(f"💾 [Scan] Updated database status to {status_val} for {url} (Group: {entity_key})")
     except Exception as dbe:
         log_worker_event(f"❌ [Scan] Failed to update database status: {dbe}", level="ERROR")
 
