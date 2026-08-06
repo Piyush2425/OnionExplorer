@@ -38,6 +38,7 @@ def log_worker_event(msg, level="INFO"):
 
 # Directory setup
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.join(BASE_DIR, "data")
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 SCREENSHOTS_DIR = os.path.join(STATIC_DIR, "screenshots")
 os.makedirs(SCREENSHOTS_DIR, exist_ok=True)
@@ -73,6 +74,11 @@ def get_url_md5(url: str) -> str:
 
 def make_screenshot_driver(use_tor: bool = True) -> webdriver.Firefox:
     """Instantiate a Firefox web driver with optional SOCKS5 proxy configuration."""
+    # Ubuntu Snap Firefox sandbox fix: redirect profile creation directory from /tmp to workspace writeable data/tmp
+    custom_tmp = os.path.join(DATA_DIR, "tmp")
+    os.makedirs(custom_tmp, exist_ok=True)
+    os.environ["TMPDIR"] = custom_tmp
+
     opts = FirefoxOptions()
     if HEADLESS:
         opts.add_argument("-headless")
