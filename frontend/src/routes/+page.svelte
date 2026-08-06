@@ -642,11 +642,12 @@
 																{#if isTelegram}
 																	<span class="text-muted" style="font-size: 0.75rem; opacity: 0.6;">N/A (Telegram)</span>
 																{:else if u.screenshot}
-																	<!-- svelte-ignore a11y_click_events_have_key_events -->
-																	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 																	<div
 																		class="screenshot-thumb-container"
+																		role="button"
+																		tabindex="0"
 																		onclick={() => openScreenshot(u.screenshot, `${ent.name}: ${u.url}`)}
+																		onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') openScreenshot(u.screenshot, `${ent.name}: ${u.url}`); }}
 																	>
 																		<img
 																			src="/static/screenshots/{u.screenshot}"
@@ -723,18 +724,28 @@
 
 <!-- ═══ LIGHTBOX PREVIEW SCREENSHOT MODAL ═══ -->
 {#if showScreenshotModal}
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-	<div class="modal" style="display: block;" onclick={() => showScreenshotModal = false}>
-		<!-- svelte-ignore a11y_click_events_have_key_events -->
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<span class="modal-close" onclick={() => showScreenshotModal = false}>&times;</span>
-		<!-- svelte-ignore a11y_click_events_have_key_events -->
-		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+	<div
+		class="modal"
+		style="display: block;"
+		role="button"
+		tabindex="0"
+		onclick={() => showScreenshotModal = false}
+		onkeydown={(e) => { if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') showScreenshotModal = false; }}
+	>
+		<span
+			class="modal-close"
+			role="button"
+			tabindex="0"
+			onclick={() => showScreenshotModal = false}
+			onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') showScreenshotModal = false; }}
+		>
+			&times;
+		</span>
 		<img
 			class="modal-content"
 			src={modalImgSrc}
 			alt="Full Capture Preview"
+			role="presentation"
 			onclick={(e) => e.stopPropagation()}
 		/>
 		<div id="modalCaption">{modalCaptionText}</div>
