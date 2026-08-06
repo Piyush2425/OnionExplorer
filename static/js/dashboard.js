@@ -732,7 +732,7 @@
 
                 checkBtnHtml = `
                     <button class="check-status-btn" onclick="triggerScreenshotCheck('${esc(e.key)}', '${esc(u.url)}', this); event.stopPropagation();" title="Verify status and take screenshot">
-                        🔄 Re-Check
+                        ⚡ Scan
                     </button>
                 `;
             }
@@ -880,7 +880,7 @@
                         if (targetUrl && (targetUrl.screenshot || checkCount >= 12)) {
                             clearInterval(checkInterval);
                             btn.disabled = false;
-                            btn.innerHTML = '🔄 Re-Check';
+                            btn.innerHTML = '⚡ Scan';
                             btn.style.opacity = '1';
                         }
                     }
