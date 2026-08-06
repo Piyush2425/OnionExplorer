@@ -1020,32 +1020,25 @@ def api_screenshot_scan_all_online():
     data = build_unified_data()
     queued_count = 0
     
-    # Sort Forums/Groups and Markets alphabetically by name
-    sorted_forums = sorted(
-        data.get("forums_groups", {}).items(),
-        key=lambda x: x[1].get("name", x[0]).lower()
-    )
-    sorted_markets = sorted(
-        data.get("markets", {}).items(),
+    # Combine Forums/Groups and Markets into a single unified list
+    all_entities = []
+    for key, val in data.get("forums_groups", {}).items():
+        if val.get("sector") == "telegram_links" or "telegram" in key.lower():
+            continue
+        all_entities.append((key, val))
+    for key, val in data.get("markets", {}).items():
+        if val.get("sector") == "telegram_links" or "telegram" in key.lower():
+            continue
+        all_entities.append((key, val))
+        
+    # Sort the unified list alphabetically by group/entity name
+    sorted_entities = sorted(
+        all_entities,
         key=lambda x: x[1].get("name", x[0]).lower()
     )
     
-    # Iterate Forums/Groups
-    for key, val in sorted_forums:
-        if val.get("sector") == "telegram_links" or "telegram" in key.lower():
-            continue
-        for u in val.get("urls", []):
-            url_str = u.get("url", "")
-            if "t.me" in url_str.lower() or "telegram.me" in url_str.lower():
-                continue
-            if u.get("status") == "Online" or u.get("status") == "Up":
-                queue_url_for_screenshot(key, url_str, force=True)
-                queued_count += 1
-                
-    # Iterate Markets
-    for key, val in sorted_markets:
-        if val.get("sector") == "telegram_links" or "telegram" in key.lower():
-            continue
+    # Queue them in unified alphabetical order
+    for key, val in sorted_entities:
         for u in val.get("urls", []):
             url_str = u.get("url", "")
             if "t.me" in url_str.lower() or "telegram.me" in url_str.lower():
