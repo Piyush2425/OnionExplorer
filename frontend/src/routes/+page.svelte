@@ -203,7 +203,7 @@
 	}
 
 	async function triggerScan(entityKey, url) {
-		scanStatuses[url] = 'queued';
+		scanStatuses = { ...scanStatuses, [url]: 'queued' };
 		try {
 			const resp = await fetch('/api/screenshot/check', {
 				method: 'POST',
@@ -213,7 +213,7 @@
 			if (resp.ok) {
 				const res = await resp.json();
 				if (res.status === 'queued') {
-					scanStatuses[url] = 'processing';
+					scanStatuses = { ...scanStatuses, [url]: 'processing' };
 					
 					let checkCount = 0;
 					const checkInterval = setInterval(async () => {
@@ -226,19 +226,27 @@
 							const u = item.urls.find(link => link.url === url);
 							if (u && (u.screenshot || checkCount >= 12)) {
 								clearInterval(checkInterval);
-								delete scanStatuses[url];
+								const copy = { ...scanStatuses };
+								delete copy[url];
+								scanStatuses = copy;
 							}
 						}
 					}, 2500);
 				} else {
-					delete scanStatuses[url];
+					const copy = { ...scanStatuses };
+					delete copy[url];
+					scanStatuses = copy;
 				}
 			} else {
-				delete scanStatuses[url];
+				const copy = { ...scanStatuses };
+				delete copy[url];
+				scanStatuses = copy;
 			}
 		} catch (err) {
 			console.error('Error triggering link scan:', err);
-			delete scanStatuses[url];
+			const copy = { ...scanStatuses };
+			delete copy[url];
+			scanStatuses = copy;
 		}
 	}
 

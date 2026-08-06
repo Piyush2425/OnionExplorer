@@ -87,15 +87,19 @@ def make_screenshot_driver(use_tor: bool = True) -> webdriver.Firefox:
     opts.set_preference("general.useragent.override", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0")
     
     if use_tor:
-        logger.info(f"Routing Firefox browser automation traffic via Tor SOCKS5 proxy ({TOR_HOST}:{TOR_PORT})...")
+        log_worker_event(f"Routing Firefox browser automation traffic via Tor SOCKS5 proxy ({TOR_HOST}:{TOR_PORT})...")
         opts.set_preference("network.proxy.type", 1)
         opts.set_preference("network.proxy.socks", TOR_HOST)
         opts.set_preference("network.proxy.socks_port", TOR_PORT)
         opts.set_preference("network.proxy.socks_version", 5)
         opts.set_preference("network.proxy.socks_remote_dns", True) # Force DNS resolution via Tor
 
-    service = FirefoxService(GeckoDriverManager().install())
-    driver = webdriver.Firefox(service=service, options=opts)
+    try:
+        service = FirefoxService(GeckoDriverManager().install())
+        driver = webdriver.Firefox(service=service, options=opts)
+    except Exception as gdm_err:
+        logger.warning(f"GeckoDriverManager install failed: {gdm_err}. Attempting default system geckodriver path fallback.")
+        driver = webdriver.Firefox(options=opts)
     driver.set_page_load_timeout(60) # Long timeout to allow slow Tor loading
     return driver
 
@@ -170,12 +174,12 @@ def queue_url_for_screenshot(entity_key: str, url: str, force: bool = False):
             return
         active_tasks.add(task_id)
         task_queue.put({"entity_key": entity_key, "url": url})
-        logger.info(f"📥 [Screenshot Queue] Added task: {url}")
+        log_worker_event(f"📥 [Screenshot Queue] Added task: {url}")
 
 def worker_loop():
     """Background execution loop processing tasks sequentially."""
     global running
-    logger.info("📟 Screenshot verification worker thread started.")
+    log_worker_event("📟 Screenshot verification worker thread started.")
     
     while running:
         try:
@@ -186,7 +190,7 @@ def worker_loop():
             try:
                 capture_screenshot_task(entity_key, url)
             except Exception as loop_err:
-                logger.error(f"Error executing screenshot task: {loop_err}")
+                log_worker_event(f"Error executing screenshot task: {loop_err}", level="ERROR")
             finally:
                 with tasks_lock:
                     task_id = f"{entity_key}:{url}"
@@ -195,7 +199,7 @@ def worker_loop():
         except Empty:
             continue
         except Exception as e:
-            logger.error(f"Screenshot worker loop error: {e}")
+            log_worker_event(f"Screenshot worker loop error: {e}", level="ERROR")
             time.sleep(2)
 
 def start_screenshot_worker():
@@ -205,7 +209,7 @@ def start_screenshot_worker():
     if worker_thread is None or not worker_thread.is_alive():
         worker_thread = threading.Thread(target=worker_loop, daemon=True, name="ScreenshotWorker")
         worker_thread.start()
-        logger.info("✨ Screenshot worker thread launched.")
+        log_worker_event("✨ Screenshot worker thread launched.")
 
 def stop_screenshot_worker():
     """Stops the screenshot queue worker thread gracefully."""
@@ -214,4 +218,4 @@ def stop_screenshot_worker():
     if worker_thread:
         worker_thread.join(timeout=5)
         worker_thread = None
-        logger.info("🛑 Screenshot worker thread stopped.")
+        log_worker_event("🛑 Screenshot worker thread stopped.")
