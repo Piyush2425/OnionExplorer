@@ -27,14 +27,22 @@
 	let showScreenshotModal = $state(false);
 	let modalImgSrc = $state('');
 	let modalCaptionText = $state('');
-	let isLightTheme = $state(false);
+	let isLightTheme = $state(true);
+	let isLogsCollapsed = $state(false);
 
 	let logsTerminal = $state(null);
 
 	// ═══ DERIVED VALUES (Svelte 5 Runes) ═══
-	let allForumsGroups = $derived(Object.values(rawData.forums_groups || {}));
-	let allMarkets = $derived(Object.values(rawData.markets || {}));
-	let allTelegramLinks = $derived(Object.values(rawData.telegram_links || {}));
+	// Map dictionary key into entity object properties to fix "undefined key" table rendering bugs
+	let allForumsGroups = $derived(
+		Object.entries(rawData.forums_groups || {}).map(([key, val]) => ({ ...val, key }))
+	);
+	let allMarkets = $derived(
+		Object.entries(rawData.markets || {}).map(([key, val]) => ({ ...val, key }))
+	);
+	let allTelegramLinks = $derived(
+		Object.entries(rawData.telegram_links || {}).map(([key, val]) => ({ ...val, key }))
+	);
 
 	// Top Counters
 	let countForumsGroups = $derived(allForumsGroups.length);
@@ -84,6 +92,9 @@
 			list = allTelegramLinks;
 		}
 
+		// Ensure list elements are valid and safe to sort
+		list = list.filter(e => e && e.name);
+
 		// Apply Status Filter
 		if (currentFilter === 'has-online') {
 			list = list.filter(e => e.online_count > 0);
@@ -100,8 +111,8 @@
 		if (searchQuery.trim()) {
 			const q = searchQuery.toLowerCase().trim();
 			list = list.filter(e => {
-				const matchesName = e.name.toLowerCase().includes(q);
-				const matchesUrl = e.urls && e.urls.some(u => u.url.toLowerCase().includes(q));
+				const matchesName = (e.name || '').toLowerCase().includes(q);
+				const matchesUrl = e.urls && e.urls.some(u => u.url && u.url.toLowerCase().includes(q));
 				const matchesSource = e.sources && e.sources.some(s => s.toLowerCase().includes(q));
 				return matchesName || matchesUrl || matchesSource;
 			});
@@ -109,9 +120,9 @@
 
 		// Apply Sorting
 		if (currentSort === 'name-asc') {
-			list.sort((a, b) => a.name.localeCompare(b.name));
+			list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 		} else if (currentSort === 'name-desc') {
-			list.sort((a, b) => b.name.localeCompare(a.name));
+			list.sort((a, b) => (b.name || '').localeCompare(a.name || ''));
 		} else if (currentSort === 'urls-desc') {
 			list.sort((a, b) => (b.urls?.length || 0) - (a.urls?.length || 0));
 		} else if (currentSort === 'online-desc') {
@@ -120,6 +131,11 @@
 
 		return list;
 	});
+
+	// Total link match counters
+	let totalLinkMatches = $derived(
+		filteredEntities.reduce((acc, e) => acc + (e.urls?.length || 0), 0)
+	);
 
 	// ═══ API CALLS ═══
 	async function loadData() {
@@ -264,7 +280,6 @@
 		});
 	}
 
-	// Dynamic tab counting
 	function getTabCount(tabName) {
 		if (tabName === 'all_sectors') {
 			return allForumsGroups.length + allMarkets.length + allTelegramLinks.length;
@@ -292,15 +307,22 @@
 		return 'Offline';
 	}
 
+	function clearSearch() {
+		searchQuery = '';
+	}
+
 	// ═══ ONMOUNT POLLING ═══
 	onMount(() => {
 		loadData();
 		loadScraperStatus();
 		fetchLogs();
 
-		// Set local theme state
+		// Set default theme to Light UI
 		const savedTheme = localStorage.getItem('theme');
-		if (savedTheme === 'light') {
+		if (savedTheme === 'dark') {
+			isLightTheme = false;
+			document.body.classList.remove('light-theme');
+		} else {
 			isLightTheme = true;
 			document.body.classList.add('light-theme');
 		}
@@ -409,7 +431,7 @@
 		</div>
 	</section>
 
-	<!-- ═══ TABS & EXPORTS ═══ -->
+	<!-- ═══ TABS & FILTERS BAR (HORIZONTAL RESTORED LAYOUT) ═══ -->
 	<section class="controls-bar">
 		<div class="tab-group">
 			{#each ['all_sectors', 'forums_groups', 'markets', 'telegram_links'] as tabName}
@@ -425,291 +447,94 @@
 				</button>
 			{/each}
 		</div>
-		<div class="export-group">
+
+		<div class="filter-group">
+			<!-- Link Status Filter Chips -->
+			<div class="filter-chips">
+				<button
+					class="chip {currentFilter === 'all' ? 'active' : ''}"
+					onclick={() => currentFilter = 'all'}
+				>
+					All
+				</button>
+				<button
+					class="chip {currentFilter === 'has-online' ? 'active' : ''}"
+					onclick={() => currentFilter = 'has-online'}
+				>
+					Has Online
+				</button>
+				<button
+					class="chip {currentFilter === 'all-offline' ? 'active' : ''}"
+					onclick={() => currentFilter = 'all-offline'}
+				>
+					All Offline
+				</button>
+			</div>
+
+			<!-- Sort Settings Dropdown -->
+			<div class="sort-dropdown">
+				<select bind:value={currentSort}>
+					<option value="name-asc">Name A→Z</option>
+					<option value="name-desc">Name Z→A</option>
+					<option value="urls-desc">Most URLs</option>
+					<option value="online-desc">Most Online</option>
+				</select>
+			</div>
+
+			<!-- Source Filter Dropdown -->
+			<div class="sort-dropdown">
+				<select bind:value={currentSourceFilter}>
+					<option value="all">🔍 All Sources</option>
+					{#each discoveredSources as src}
+						<option value={src}>
+							{#if src === 'rlive'}Ransomware.Live{:else if src === 'rlook'}RansomLook{:else if src === 'rfeed'}RansomFeed{:else if src === 'watchguard'}WatchGuard{:else}{src.replace('github:', '')}{/if}
+						</option>
+					{/each}
+				</select>
+			</div>
+
+			<!-- Export Buttons -->
 			<a
 				href="/api/export/csv?sector={currentTab}&status={currentFilter}&source={currentSourceFilter}"
-				class="export-btn csv"
+				class="chip export-btn"
 			>
-				📊 Export CSV
+				📥 Export CSV
 			</a>
 			<a
 				href="/api/export/markdown?sector={currentTab}&status={currentFilter}&source={currentSourceFilter}"
-				class="export-btn md"
+				class="chip export-btn md-btn"
 			>
-				📝 Export Report
+				📝 Export Markdown
 			</a>
 		</div>
 	</section>
 
-	<!-- ═══ DASHBOARD CONTENT SPLIT ═══ -->
-	<div class="dashboard-layout">
-		<!-- ═══ SIDEBAR FILTERS ═══ -->
-		<aside class="sidebar">
-			<!-- Link Status Filters -->
-			<div class="filter-section">
-				<h3 class="filter-title">Link Status</h3>
-				<div class="filter-group">
-					<button
-						class="btn-filter {currentFilter === 'all' ? 'active' : ''}"
-						onclick={() => currentFilter = 'all'}
-					>
-						Show All
-					</button>
-					<button
-						class="btn-filter {currentFilter === 'has-online' ? 'active' : ''}"
-						onclick={() => currentFilter = 'has-online'}
-					>
-						Online Only
-					</button>
-					<button
-						class="btn-filter {currentFilter === 'all-offline' ? 'active' : ''}"
-						onclick={() => currentFilter = 'all-offline'}
-					>
-						Offline Only
-					</button>
-				</div>
-			</div>
-
-			<!-- Dynamic Feed Sources Checklist -->
-			<div class="filter-section">
-				<h3 class="filter-title">Aggregated Sources</h3>
-				<div class="source-checkbox-list">
-					<label class="source-checkbox-item">
-						<input
-							type="radio"
-							name="sourceFilter"
-							checked={currentSourceFilter === 'all'}
-							onchange={() => currentSourceFilter = 'all'}
-						/>
-						<span class="checkbox-custom"></span>
-						<span class="source-label">All Sources</span>
-					</label>
-					{#each discoveredSources as src}
-						<label class="source-checkbox-item">
-							<input
-								type="radio"
-								name="sourceFilter"
-								checked={currentSourceFilter === src}
-								onchange={() => currentSourceFilter = src}
-							/>
-							<span class="checkbox-custom"></span>
-							<span class="source-label">
-								{#if src === 'rlive'}Ransomware.Live{:else if src === 'rlook'}RansomLook{:else if src === 'rfeed'}RansomFeed{:else if src === 'watchguard'}WatchGuard{:else}{src.replace('github:', '')}{/if}
-							</span>
-						</label>
-					{/each}
-				</div>
-			</div>
-
-			<!-- Sorting Options -->
-			<div class="filter-section">
-				<h3 class="filter-title">Sort Settings</h3>
-				<div class="filter-group vertical">
-					<button
-						class="btn-sort {currentSort === 'name-asc' ? 'active' : ''}"
-						onclick={() => currentSort = 'name-asc'}
-					>
-						🔤 Name (A - Z)
-					</button>
-					<button
-						class="btn-sort {currentSort === 'name-desc' ? 'active' : ''}"
-						onclick={() => currentSort = 'name-desc'}
-					>
-						🔤 Name (Z - A)
-					</button>
-					<button
-						class="btn-sort {currentSort === 'urls-desc' ? 'active' : ''}"
-						onclick={() => currentSort = 'urls-desc'}
-					>
-						🔗 URL Count
-					</button>
-					<button
-						class="btn-sort {currentSort === 'online-desc' ? 'active' : ''}"
-						onclick={() => currentSort = 'online-desc'}
-					>
-						🟢 Active Links
-					</button>
-				</div>
-			</div>
-		</aside>
-
-		<!-- ═══ DIRECTORY MAIN TABLE ═══ -->
-		<main class="main-content">
-			<div class="data-table-container">
-				<table class="data-table">
-					<thead>
-						<tr>
-							<th style="width: 40px;"></th>
-							<th>Threat Actor / Entity</th>
-							<th>Domain / Sector</th>
-							<th>Overall Status</th>
-							<th>Feeds</th>
-							<th>Discovered Links</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each filteredEntities as ent (ent.key)}
-							<!-- Threat Actor Accordion Header -->
-							<!-- svelte-ignore a11y_click_events_have_key_events -->
-							<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-							<tr
-								class="entity-row {expandedKeys.has(ent.key) ? 'expanded' : ''}"
-								onclick={() => toggleRow(ent.key)}
-							>
-								<td class="arrow-cell">
-									<span class="expand-arrow">{expandedKeys.has(ent.key) ? '▼' : '▶'}</span>
-								</td>
-								<td class="name-cell">
-									<strong>{ent.name}</strong>
-								</td>
-								<td>
-									<span class="sector-badge {ent.sector || 'forums_groups'}">
-										{#if ent.sector === 'forums_groups'}Forum{:else if ent.sector === 'markets'}Market{:else}Telegram{/if}
-									</span>
-								</td>
-								<td>
-									<div class="status-indicator {getStatusClass(ent)}">
-										<span class="status-pip {getStatusClass(ent)}"></span>
-										{getStatusLabel(ent)}
-									</div>
-								</td>
-								<td>
-									<div class="source-tags">
-										{#each ent.sources || [] as s}
-											<span class="source-tag {s.startsWith('github:') ? 'github' : s}">
-												{#if s === 'rlive'}R.live{:else if s === 'rlook'}R.look{:else if s === 'rfeed'}R.feed{:else if s === 'watchguard'}WatchGuard{:else}{s.replace('github:', '')}{/if}
-											</span>
-										{/each}
-									</div>
-								</td>
-								<td>
-									<div class="links-counter-badge">
-										<span class="online-count">{ent.online_count || 0}</span> / 
-										<span class="total-count">{ent.urls?.length || 0}</span> active
-									</div>
-								</td>
-							</tr>
-
-							<!-- Expanded URLs Subtable Details Sheet -->
-							{#if expandedKeys.has(ent.key)}
-								<tr class="details-row visible" id="details-{ent.key}">
-									<td colspan="6">
-										<div class="details-content">
-											<table class="nested-links-table">
-												<thead>
-													<tr>
-														<th>Onion URL / Invite Link</th>
-														<th>Status</th>
-														<th>Discovered Sources</th>
-														<th>Last Visited</th>
-														<th style="width: 120px;">Screen</th>
-														<th style="width: 100px;">Actions</th>
-													</tr>
-												</thead>
-												<tbody>
-													{#each ent.urls as u}
-														{@const isOnline = u.status === 'Online' || u.status === 'Up'}
-														{@const isTelegram = u.url.includes('t.me') || u.url.includes('telegram.me') || ent.sector === 'telegram_links'}
-														<tr>
-															<td class="nested-url-cell">
-																<span class="url-dot {isOnline ? 'online' : 'offline'}"></span>
-																<a href={u.url} target="_blank" class="nested-link">{u.url}</a>
-																<button
-																	class="copy-url-btn"
-																	onclick={(e) => copyToClipboard(u.url, e)}
-																	title="Copy URL"
-																>
-																	📋
-																</button>
-															</td>
-															<td>
-																<span class="status-indicator {isOnline ? 'online' : 'offline'}">
-																	<span class="status-pip {isOnline ? 'online' : 'offline'}"></span>
-																	{isOnline ? 'Up' : 'Down'}
-																</span>
-															</td>
-															<td>
-																<div class="source-tags">
-																	{#each u.sources || [] as s}
-																		<span class="source-tag {s.startsWith('github:') ? 'github' : s}">
-																			{#if s === 'rlive'}R.live{:else if s === 'rlook'}R.look{:else if s === 'rfeed'}R.feed{:else if s === 'watchguard'}WatchGuard{:else}{s.replace('github:', '')}{/if}
-																		</span>
-																	{/each}
-																</div>
-															</td>
-															<td class="last-visit-cell">{u.last_visit || 'N/A'}</td>
-															<td>
-																{#if isTelegram}
-																	<span class="text-muted" style="font-size: 0.75rem; opacity: 0.6;">N/A (Telegram)</span>
-																{:else if u.screenshot}
-																	<div
-																		class="screenshot-thumb-container"
-																		role="button"
-																		tabindex="0"
-																		onclick={() => openScreenshot(u.screenshot, `${ent.name}: ${u.url}`)}
-																		onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') openScreenshot(u.screenshot, `${ent.name}: ${u.url}`); }}
-																	>
-																		<img
-																			src="/static/screenshots/{u.screenshot}"
-																			class="screenshot-thumb"
-																			alt="Preview"
-																		/>
-																	</div>
-																{:else}
-																	<div class="screenshot-thumb-container" style="cursor: default;">
-																		<div class="screenshot-placeholder">No Preview</div>
-																	</div>
-																{/if}
-															</td>
-															<td>
-																{#if isTelegram}
-																	<span class="text-muted" style="font-size: 0.75rem; opacity: 0.6;">N/A</span>
-																{:else}
-																	<button
-																		class="check-status-btn"
-																		onclick={() => triggerScan(ent.key, u.url)}
-																		disabled={scanStatuses[u.url] !== undefined}
-																	>
-																		{#if scanStatuses[u.url] === 'queued'}
-																			🔄 Queued...
-																		{:else if scanStatuses[u.url] === 'processing'}
-																			⏳ Processing...
-																		{:else}
-																			⚡ Scan
-																		{/if}
-																	</button>
-																{/if}
-															</td>
-														</tr>
-													{/each}
-												</tbody>
-											</table>
-										</div>
-									</td>
-								</tr>
-							{/if}
-						{:else}
-							<tr>
-								<td colspan="6" class="no-urls-placeholder" style="padding: 40px; text-align: center; color: var(--text-muted);">
-									No threat directories or matching entries found.
-								</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
-		</main>
-	</div>
-
-	<!-- ═══ ROLLING LIVE SCRAPER LOG CONSOLE ═══ -->
-	<section class="log-section">
-		<div class="log-header">
-			<h2>Live Scraper Log Console</h2>
-			<span class="pulse-indicator">
-				<span class="pulse-dot"></span> Streaming Realtime logs
+	<!-- ═══ SEARCH SUMMARY BANNER ═══ -->
+	{#if searchQuery.trim()}
+		<div class="search-summary-banner">
+			<span class="banner-icon">🔍</span>
+			<span class="banner-text">
+				Found <strong>{filteredEntities.length}</strong> matching entries and <strong>{totalLinkMatches}</strong> links
 			</span>
+			<button class="clear-search-btn" onclick={clearSearch}>✕ Clear Search</button>
 		</div>
-		<div class="log-terminal" bind:this={logsTerminal}>
+	{/if}
+
+	<!-- ═══ LIVE SCRAPER LOG CONSOLE ═══ -->
+	<section class="log-card">
+		<div class="log-card-header">
+			<div class="log-card-title">
+				<span class="pulse-icon {scraperState.is_running ? 'active' : ''}">●</span>
+				<span>📟 Live Scraper Log Console</span>
+			</div>
+			<div class="log-card-actions">
+				<button class="log-btn" onclick={() => recentLogs = []}>🗑️ Clear</button>
+				<button class="log-btn" onclick={() => isLogsCollapsed = !isLogsCollapsed}>
+					{isLogsCollapsed ? '🔼 Expand' : '🔽 Collapse'}
+				</button>
+			</div>
+		</div>
+		<div class="log-card-body {isLogsCollapsed ? 'collapsed' : ''}" bind:this={logsTerminal}>
 			{#each recentLogs as line}
 				{@const isErr = line.includes('[ERROR]')}
 				{@const isWarn = line.includes('[WARNING]') || line.includes('⚠️')}
@@ -718,6 +543,175 @@
 					{line}
 				</div>
 			{/each}
+		</div>
+	</section>
+
+	<!-- ═══ UNIFIED THREAT DIRECTORY TABLE ═══ -->
+	<section class="table-card">
+		<div class="table-container">
+			<table class="unified-table">
+				<thead>
+					<tr>
+						<th style="width: 40px;"></th>
+						<th>Threat Actor / Entity</th>
+						<th>Sector / Type</th>
+						<th>Combined Status</th>
+						<th>Sources</th>
+						<th>Link Count</th>
+					</tr>
+				</thead>
+				<tbody>
+					{#each filteredEntities as ent (ent.key)}
+						<!-- Threat Actor Accordion Header -->
+						<!-- svelte-ignore a11y_click_events_have_key_events -->
+						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+						<tr
+							class="entity-row {expandedKeys.has(ent.key) ? 'expanded' : ''}"
+							onclick={() => toggleRow(ent.key)}
+						>
+							<td class="arrow-cell">
+								<span class="expand-arrow">{expandedKeys.has(ent.key) ? '▼' : '▶'}</span>
+							</td>
+							<td class="name-cell">
+								<strong>{ent.name}</strong>
+							</td>
+							<td>
+								<span class="sector-badge {ent.sector || 'forums_groups'}">
+									{#if ent.sector === 'forums_groups'}Forum{:else if ent.sector === 'markets'}Market{:else}Telegram{/if}
+								</span>
+							</td>
+							<td>
+								<div class="status-indicator {getStatusClass(ent)}">
+									<span class="status-pip {getStatusClass(ent)}"></span>
+									{getStatusLabel(ent)}
+								</div>
+							</td>
+							<td>
+								<div class="source-tags">
+									{#each ent.sources || [] as s}
+										<span class="source-tag {s.startsWith('github:') ? 'github' : s}">
+											{#if s === 'rlive'}R.live{:else if s === 'rlook'}R.look{:else if s === 'rfeed'}R.feed{:else if s === 'watchguard'}WatchGuard{:else}{s.replace('github:', '')}{/if}
+										</span>
+									{/each}
+								</div>
+							</td>
+							<td>
+								<div class="links-counter-badge">
+									<span class="online-count">{ent.online_count || 0}</span> / 
+									<span class="total-count">{ent.urls?.length || 0}</span> active
+								</div>
+							</td>
+						</tr>
+
+						<!-- Expanded URLs Subtable Details Sheet -->
+						{#if expandedKeys.has(ent.key)}
+							<tr class="details-row visible" id="details-{ent.key}">
+								<td colspan="6">
+									<div class="details-content">
+										<table class="nested-links-table">
+											<thead>
+												<tr>
+													<th>Onion URL / Invite Link</th>
+													<th>Status</th>
+													<th>Discovered Sources</th>
+													<th>Last Visited</th>
+													<th style="width: 120px;">Screen</th>
+													<th style="width: 100px;">Actions</th>
+												</tr>
+											</thead>
+											<tbody>
+												{#each ent.urls as u}
+													{@const isOnline = u.status === 'Online' || u.status === 'Up'}
+													{@const isTelegram = u.url.includes('t.me') || u.url.includes('telegram.me') || ent.sector === 'telegram_links'}
+													<tr>
+														<td class="nested-url-cell">
+															<span class="url-dot {isOnline ? 'online' : 'offline'}"></span>
+															<a href={u.url} target="_blank" class="nested-link">{u.url}</a>
+															<button
+																class="copy-url-btn"
+																onclick={(e) => copyToClipboard(u.url, e)}
+																title="Copy URL"
+															>
+																📋
+															</button>
+														</td>
+														<td>
+															<span class="status-indicator {isOnline ? 'online' : 'offline'}">
+																<span class="status-pip {isOnline ? 'online' : 'offline'}"></span>
+																{isOnline ? 'Up' : 'Down'}
+															</span>
+														</td>
+														<td>
+															<div class="source-tags">
+																{#each u.sources || [] as s}
+																	<span class="source-tag {s.startsWith('github:') ? 'github' : s}">
+																		{#if s === 'rlive'}R.live{:else if s === 'rlook'}R.look{:else if s === 'rfeed'}R.feed{:else if s === 'watchguard'}WatchGuard{:else}{s.replace('github:', '')}{/if}
+																	</span>
+																{/each}
+															</div>
+														</td>
+														<td class="last-visit-cell">{u.last_visit || 'N/A'}</td>
+														<td>
+															{#if isTelegram}
+																<span class="text-muted" style="font-size: 0.75rem; opacity: 0.6;">N/A (Telegram)</span>
+															{:else if u.screenshot}
+																<!-- svelte-ignore a11y_click_events_have_key_events -->
+																<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+																<div
+																	class="screenshot-thumb-container"
+																	role="button"
+																	tabindex="0"
+																	onclick={() => openScreenshot(u.screenshot, `${ent.name}: ${u.url}`)}
+																	onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') openScreenshot(u.screenshot, `${ent.name}: ${u.url}`); }}
+																>
+																	<img
+																		src="/static/screenshots/{u.screenshot}"
+																		class="screenshot-thumb"
+																		alt="Preview"
+																	/>
+																</div>
+															{:else}
+																<div class="screenshot-thumb-container" style="cursor: default;">
+																	<div class="screenshot-placeholder">No Preview</div>
+																</div>
+															{/if}
+														</td>
+														<td>
+															{#if isTelegram}
+																<span class="text-muted" style="font-size: 0.75rem; opacity: 0.6;">N/A</span>
+															{:else}
+																<button
+																	class="check-status-btn"
+																	onclick={() => triggerScan(ent.key, u.url)}
+																	disabled={scanStatuses[u.url] !== undefined}
+																>
+																	{#if scanStatuses[u.url] === 'queued'}
+																		🔄 Queued...
+																	{:else if scanStatuses[u.url] === 'processing'}
+																		⏳ Processing...
+																	{:else}
+																		⚡ Scan
+																	{/if}
+																</button>
+															{/if}
+														</td>
+													</tr>
+												{/each}
+											</tbody>
+										</table>
+									</div>
+								</td>
+							</tr>
+						{/if}
+					{:else}
+						<tr>
+							<td colspan="6" class="no-urls-placeholder" style="padding: 40px; text-align: center; color: var(--text-muted);">
+								No threat directories or matching entries found.
+							</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
 		</div>
 	</section>
 </div>

@@ -1186,6 +1186,81 @@ body.light-theme .settings-group select {
     color: var(--text-primary);
 }
 
+/* Light Theme Component Overrides */
+body.light-theme .table-card {
+    background: #ffffff;
+    border-color: #e2e8f0;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+}
+
+body.light-theme .unified-table th {
+    background: #f8fafc;
+    color: #475569;
+    border-bottom-color: #e2e8f0;
+}
+
+body.light-theme .unified-table td {
+    border-bottom-color: #f1f5f9;
+    color: #0f172a;
+}
+
+body.light-theme .entity-row:hover {
+    background: #f1f5f9;
+}
+
+body.light-theme .entity-row.expanded {
+    background: #f0f9ff;
+}
+
+body.light-theme .nested-links-table {
+    background: #f8fafc;
+    border-color: #e2e8f0;
+}
+
+body.light-theme .nested-links-table th {
+    background: #f1f5f9;
+    color: #64748b;
+}
+
+body.light-theme .nested-links-table td {
+    border-bottom-color: #e2e8f0;
+    color: #334155;
+}
+
+body.light-theme .log-card {
+    background: #ffffff;
+    border-color: #e2e8f0;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+body.light-theme .log-card-header {
+    background: #f8fafc;
+    border-bottom-color: #e2e8f0;
+}
+
+body.light-theme .log-card-body {
+    background: #f8fafc;
+    color: #0f172a;
+}
+
+body.light-theme .search-box input {
+    background: #ffffff;
+    color: #0f172a;
+    border-color: #cbd5e1;
+}
+
+body.light-theme .search-box input::placeholder {
+    color: #94a3b8;
+}
+
+body.light-theme .nested-link {
+    color: #2563eb;
+}
+
+body.light-theme .nested-link:hover {
+    color: #1d4ed8;
+}
+
 /* ---------- Scrollbar ---------- */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: var(--bg-primary); }
