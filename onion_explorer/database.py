@@ -278,6 +278,15 @@ class SQLiteIntelDatabase(BaseDatabase):
             """, (1 if analyst_working else 0, analyst_notes, entity_key, url))
             conn.commit()
 
+    def update_location_status(self, entity_key: str, url: str, status: str):
+        with self._get_conn() as conn:
+            conn.execute("""
+                UPDATE locations
+                SET status = ?
+                WHERE entity_key = ? AND url = ?
+            """, (status, entity_key, url))
+            conn.commit()
+
 
 class MongoIntelDatabase(BaseDatabase):
     def __init__(self, connection_uri: str = "mongodb://localhost:27017"):
@@ -376,6 +385,12 @@ class MongoIntelDatabase(BaseDatabase):
         self.db.entities.update_one(
             {"_id": entity_key, "urls.url": url},
             {"$set": {"urls.$.analyst_working": analyst_working, "urls.$.analyst_notes": analyst_notes}}
+        )
+
+    def update_location_status(self, entity_key: str, url: str, status: str):
+        self.db.entities.update_one(
+            {"_id": entity_key, "urls.url": url},
+            {"$set": {"urls.$.status": status}}
         )
 
     def get_unified_data(self) -> Dict[str, Any]:

@@ -1785,3 +1785,33 @@ body.light-theme .log-line.error {
     white-space: nowrap;
 }
 
+/* Analyst Status Override Select Indicator */
+.status-select-indicator {
+    padding: 6px 12px;
+    font-family: var(--font-ui);
+    font-size: 0.76rem;
+    font-weight: 700;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    cursor: pointer;
+    outline: none;
+    transition: all var(--transition-fast);
+    background: transparent;
+}
+
+.status-select-indicator.online {
+    background: rgba(16, 185, 129, 0.1);
+    color: #065f46;
+    border-color: rgba(16, 185, 129, 0.2);
+}
+
+.status-select-indicator.offline {
+    background: rgba(239, 68, 68, 0.1);
+    color: #991b1b;
+    border-color: rgba(239, 68, 68, 0.2);
+}
+
+.status-select-indicator:focus {
+    box-shadow: 0 0 4px rgba(6, 182, 212, 0.4);
+}
+

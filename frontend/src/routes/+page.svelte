@@ -301,6 +301,28 @@
 		return visits[0];
 	}
 
+	async function updateLocationStatus(entityKey, url, newStatus) {
+		try {
+			const res = await fetch('/api/url/status_update', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					entity_key: entityKey,
+					url: url,
+					status: newStatus
+				})
+			});
+			if (res.ok) {
+				// Instantly reload database data to synchronize local states and active link counts
+				await loadData();
+				// Also append manual override details into live logs window
+				recentLogs = [...recentLogs, `[SUCCESS] 💾 Analyst manually set ${url} to ${newStatus}.`].slice(-80);
+			}
+		} catch (err) {
+			console.error('Failed to override status:', err);
+		}
+	}
+
 	// ═══ LOCAL EVENTS ═══
 	function toggleRow(key) {
 		expandedKeys[key] = !expandedKeys[key];
@@ -699,10 +721,21 @@
 															</button>
 														</td>
 														<td>
-															<span class="status-indicator {isOnline ? 'online' : 'offline'}">
-																<span class="status-pip {isOnline ? 'online' : 'offline'}"></span>
-																{isOnline ? 'Up' : 'Down'}
-															</span>
+															{#if isTelegram}
+																<span class="status-indicator {isOnline ? 'online' : 'offline'}">
+																	<span class="status-pip {isOnline ? 'online' : 'offline'}"></span>
+																	{isOnline ? 'Up' : 'Down'}
+																</span>
+															{:else}
+																<select
+																	class="status-select-indicator {isOnline ? 'online' : 'offline'}"
+																	value={u.status === 'Online' || u.status === 'Up' ? 'Online' : 'Offline'}
+																	onchange={(e) => updateLocationStatus(ent.key, u.url, e.target.value)}
+																>
+																	<option value="Online">🟢 Up</option>
+																	<option value="Offline">🔴 Down</option>
+																</select>
+															{/if}
 														</td>
 														<td>
 															<div class="source-tags">

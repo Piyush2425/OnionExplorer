@@ -1080,6 +1080,28 @@ def api_url_analyst_update():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/url/status_update", methods=["POST"])
+def api_url_status_update():
+    """Manually override a location URL's status."""
+    req = request.get_json(silent=True) or {}
+    entity_key = req.get("entity_key")
+    url = req.get("url")
+    status = req.get("status")
+    
+    if not entity_key or not url or not status:
+        return jsonify({"error": "Missing entity_key, url or status"}), 400
+        
+    try:
+        from onion_explorer.database import get_database
+        db = get_database()
+        db.update_location_status(entity_key, url, status)
+        log.info(f"💾 [Manual Override] Analyst set status of {url} (Group: {entity_key}) to {status}")
+        return jsonify({"status": "success"})
+    except Exception as e:
+        log.error(f"Failed to update location status override: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 # ═══════════════════════════════════════════════
 #  ENTRY POINT
 # ═══════════════════════════════════════════════
