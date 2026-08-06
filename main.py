@@ -1012,6 +1012,8 @@ if __name__ == "__main__":
     log.info("=" * 50)
 
     # Start background screenshot worker
+    from onion_explorer.screenshot_worker import register_log_callback
+    register_log_callback(add_log_entry)
     start_screenshot_worker()
 
     # Sync raw JSON data to database on startup

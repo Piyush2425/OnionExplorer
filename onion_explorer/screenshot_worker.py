@@ -18,6 +18,24 @@ from onion_explorer.database import get_database
 
 logger = logging.getLogger("OnionExplorer.ScreenshotWorker")
 
+# Logging callback to route progress to Flask UI log console without circular dependencies
+log_callback = None
+
+def register_log_callback(cb):
+    global log_callback
+    log_callback = cb
+
+def log_worker_event(msg, level="INFO"):
+    if level == "ERROR":
+        logger.error(msg)
+    elif level == "WARNING":
+        logger.warning(msg)
+    else:
+        logger.info(msg)
+        
+    if log_callback:
+        log_callback(msg, level)
+
 # Directory setup
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -79,7 +97,7 @@ def capture_screenshot_task(entity_key: str, url: str) -> bool:
     """Loads a URL via Firefox driver, takes screenshot, and updates DB status."""
     use_tor = is_tor_active()
     if not use_tor:
-        logger.warning(f"Tor SOCKS5 proxy not detected on {TOR_HOST}:{TOR_PORT}. Verification will fallback to direct connection.")
+        log_worker_event(f"⚠️ Tor SOCKS5 proxy not detected. Verification will fallback to direct connection.", level="WARNING")
 
     md5_hash = get_url_md5(url)
     filename = f"{md5_hash}.png"
@@ -91,20 +109,20 @@ def capture_screenshot_task(entity_key: str, url: str) -> bool:
 
     try:
         driver = make_screenshot_driver(use_tor=use_tor)
-        logger.info(f"🚀 [Screenshot] Launching Firefox for: {url}")
+        log_worker_event(f"🔍 [Scan] Launching Firefox window for: {url}")
         driver.get(url)
         
         # Wait exactly 30 seconds for dynamic content to load completely
-        logger.info(f"⏳ Waiting 30 seconds for page to load completely: {url}")
+        log_worker_event(f"⏳ [Scan] Loaded URL. Waiting 30 seconds for settling: {url}")
         time.sleep(30)
         
         # Save screenshot
         driver.save_screenshot(save_path)
-        logger.info(f"📸 [Screenshot] Successfully captured: {url} -> {save_path}")
+        log_worker_event(f"📸 [Scan] Screenshot saved successfully: static/screenshots/{filename}!")
         success = True
         status_val = "Online"
     except WebDriverException as wde:
-        logger.error(f"❌ [Screenshot] Firefox connection error for {url}: {wde}")
+        log_worker_event(f"❌ [Scan] Firefox connection error for {url}: {wde}", level="ERROR")
         # Delete stale screenshot on load failure
         if os.path.exists(save_path):
             try:
@@ -112,7 +130,7 @@ def capture_screenshot_task(entity_key: str, url: str) -> bool:
             except Exception:
                 pass
     except Exception as e:
-        logger.error(f"❌ [Screenshot] Error capturing {url}: {e}")
+        log_worker_event(f"❌ [Scan] Error capturing {url}: {e}", level="ERROR")
     finally:
         if driver:
             try:
@@ -124,9 +142,9 @@ def capture_screenshot_task(entity_key: str, url: str) -> bool:
     try:
         db = get_database()
         db.update_location_screenshot(entity_key, url, filename if success else None, status_val)
-        logger.info(f"💾 [Screenshot] Updated database for {url}: status={status_val}, screenshot={filename if success else None}")
+        log_worker_event(f"💾 [Scan] Updated database status to {status_val} for {url}")
     except Exception as dbe:
-        logger.error(f"Failed to update database for location: {dbe}")
+        log_worker_event(f"❌ [Scan] Failed to update database status: {dbe}", level="ERROR")
 
     return success
 
