@@ -18,6 +18,7 @@
     let currentSourceFilter = 'all';
     let searchQuery = '';
     let wasScraping = false;
+    const expandedKeys = new Set();
 
     // ═══ INIT ═══
     document.addEventListener('DOMContentLoaded', async () => {
@@ -758,8 +759,10 @@
             `;
         }).join('');
 
+        const isExpanded = expandedKeys.has(e.key);
+
         const detailsRowHtml = `
-            <tr class="details-row" id="details-${esc(e.key)}">
+            <tr class="details-row ${isExpanded ? 'visible' : ''}" id="details-${esc(e.key)}">
                 <td colspan="6">
                     <div class="details-content">
                         <table class="nested-links-table">
@@ -783,7 +786,7 @@
         `;
 
         return `
-            <tr class="entity-row" data-key="${esc(e.key)}" onclick="toggleTableRow('${esc(e.key)}')">
+            <tr class="entity-row ${isExpanded ? 'expanded' : ''}" data-key="${esc(e.key)}" onclick="toggleTableRow('${esc(e.key)}')">
                 <td class="arrow-cell"><span class="expand-arrow">▶</span></td>
                 <td class="name-cell"><strong>${esc(e.name)}</strong></td>
                 <td><span class="sector-badge ${sectorClass}">${sectorLabel}</span></td>
@@ -819,8 +822,10 @@
             const isExpanded = row.classList.toggle('expanded');
             if (isExpanded) {
                 detailsRow.classList.add('visible');
+                expandedKeys.add(key);
             } else {
                 detailsRow.classList.remove('visible');
+                expandedKeys.delete(key);
             }
         }
     };
