@@ -1020,8 +1020,18 @@ def api_screenshot_scan_all_online():
     data = build_unified_data()
     queued_count = 0
     
+    # Sort Forums/Groups and Markets alphabetically by name
+    sorted_forums = sorted(
+        data.get("forums_groups", {}).items(),
+        key=lambda x: x[1].get("name", x[0]).lower()
+    )
+    sorted_markets = sorted(
+        data.get("markets", {}).items(),
+        key=lambda x: x[1].get("name", x[0]).lower()
+    )
+    
     # Iterate Forums/Groups
-    for key, val in data.get("forums_groups", {}).items():
+    for key, val in sorted_forums:
         if val.get("sector") == "telegram_links" or "telegram" in key.lower():
             continue
         for u in val.get("urls", []):
@@ -1033,7 +1043,7 @@ def api_screenshot_scan_all_online():
                 queued_count += 1
                 
     # Iterate Markets
-    for key, val in data.get("markets", {}).items():
+    for key, val in sorted_markets:
         if val.get("sector") == "telegram_links" or "telegram" in key.lower():
             continue
         for u in val.get("urls", []):
@@ -1044,7 +1054,7 @@ def api_screenshot_scan_all_online():
                 queue_url_for_screenshot(key, url_str, force=True)
                 queued_count += 1
                 
-    log.info(f"⚡ [Scan All Online] Queued {queued_count} online URLs for screenshot check.")
+    log.info(f"⚡ [Scan All Online] Queued {queued_count} online URLs alphabetically for screenshot check.")
     return jsonify({"status": "queued", "count": queued_count})
 
 

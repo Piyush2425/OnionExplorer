@@ -78,14 +78,14 @@
 
 	// Dynamic tab counts (filtered based on search/status/source options)
 	let tabAllCount = $derived(
-		allForumsGroups.length + allMarkets.length + allTelegramLinks.length
+		allForumsGroups.length + allMarkets.length
 	);
 
 	// Main Filtered Entity List
 	let filteredEntities = $derived.by(() => {
 		let list = [];
 		if (currentTab === 'all_sectors') {
-			list = [...allForumsGroups, ...allMarkets, ...allTelegramLinks];
+			list = [...allForumsGroups, ...allMarkets];
 		} else if (currentTab === 'forums_groups') {
 			list = allForumsGroups;
 		} else if (currentTab === 'markets') {
@@ -167,7 +167,8 @@
 		try {
 			const res = await fetch('/api/scraper/logs');
 			if (res.ok) {
-				recentLogs = await res.json();
+				const data = await res.json();
+				recentLogs = data.map(item => `${item.time} [${item.level}] ${item.message}`);
 			}
 		} catch (err) {
 			console.error('Failed to fetch logs:', err);
