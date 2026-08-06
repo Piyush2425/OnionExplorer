@@ -31,6 +31,7 @@
 	let isLogsCollapsed = $state(false);
 	let isScanningAll = $state(false);
 	let cacheBuster = $state(Date.now());
+	let screenshotState = $state({ running: false, queue_size: 0 });
 
 	let logsTerminal = $state(null);
 
@@ -323,6 +324,41 @@
 		}
 	}
 
+	async function loadScreenshotStatus() {
+		try {
+			const res = await fetch('/api/screenshot/status');
+			if (res.ok) {
+				screenshotState = await res.json();
+			}
+		} catch (err) {
+			console.error('Failed to load screenshot status:', err);
+		}
+	}
+
+	async function pauseScanning() {
+		try {
+			const res = await fetch('/api/screenshot/pause', { method: 'POST' });
+			if (res.ok) {
+				screenshotState = await res.json();
+				recentLogs = [...recentLogs, '[WARNING] 🛑 Screenshot scanning paused by analyst.'].slice(-80);
+			}
+		} catch (err) {
+			console.error('Failed to pause scanning:', err);
+		}
+	}
+
+	async function resumeScanning() {
+		try {
+			const res = await fetch('/api/screenshot/resume', { method: 'POST' });
+			if (res.ok) {
+				screenshotState = await res.json();
+				recentLogs = [...recentLogs, '[SUCCESS] ▶️ Screenshot scanning resumed.'].slice(-80);
+			}
+		} catch (err) {
+			console.error('Failed to resume scanning:', err);
+		}
+	}
+
 	// ═══ LOCAL EVENTS ═══
 	function toggleRow(key) {
 		expandedKeys[key] = !expandedKeys[key];
@@ -392,6 +428,7 @@
 	onMount(() => {
 		loadData();
 		loadScraperStatus();
+		loadScreenshotStatus();
 		fetchLogs();
 
 		// Set default theme to Light UI
@@ -407,10 +444,12 @@
 		// Polling intervals
 		const logsInterval = setInterval(fetchLogs, 2500);
 		const statusInterval = setInterval(loadScraperStatus, 5000);
+		const screenshotInterval = setInterval(loadScreenshotStatus, 2500);
 
 		return () => {
 			clearInterval(logsInterval);
 			clearInterval(statusInterval);
+			clearInterval(screenshotInterval);
 		};
 	});
 
@@ -463,6 +502,25 @@
 			>
 				📸 Scan All Online
 			</button>
+			{#if screenshotState.running}
+				<button
+					class="scrape-all-btn stop-scan-btn"
+					onclick={pauseScanning}
+					title="Stop/Pause the background screenshot worker"
+					style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); font-weight: 750;"
+				>
+					🛑 Stop Scanning ({screenshotState.queue_size})
+				</button>
+			{:else}
+				<button
+					class="scrape-all-btn start-scan-btn"
+					onclick={resumeScanning}
+					title="Start/Resume the background screenshot worker"
+					style="background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); font-weight: 750;"
+				>
+					▶️ Start Scanning ({screenshotState.queue_size})
+				</button>
+			{/if}
 			<button class="theme-toggle-btn" onclick={toggleTheme}>
 				{isLightTheme ? '🌙 Dark UI' : '☀️ Light UI'}
 			</button>

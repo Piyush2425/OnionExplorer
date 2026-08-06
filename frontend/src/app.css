@@ -53,18 +53,23 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html {
-    font-size: 15px;
+    font-size: 16.5px;
     scroll-behavior: smooth;
     -webkit-font-smoothing: antialiased;
+    font-weight: 550; /* Makes text overall slightly bolder and more readable */
 }
 
 body {
     font-family: var(--font-ui);
     background: var(--bg-primary);
     color: var(--text-primary);
-    line-height: 1.6;
+    line-height: 1.62;
     min-height: 100vh;
     overflow-x: hidden;
+}
+
+h1, h2, h3, h4, h5, h6, th, strong, .entity-name, .toggle-btn {
+    font-weight: 750 !important;
 }
 
 /* Grid background */

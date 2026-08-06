@@ -24,6 +24,12 @@ class BaseDatabase:
     def update_location_screenshot(self, entity_key: str, url: str, screenshot_path: str, status: str):
         raise NotImplementedError()
 
+    def save_screenshot_queue(self, tasks: List[Dict[str, str]]):
+        raise NotImplementedError()
+
+    def load_screenshot_queue(self) -> List[Dict[str, str]]:
+        raise NotImplementedError()
+
 
 class SQLiteIntelDatabase(BaseDatabase):
     def __init__(self, db_path: str):
@@ -287,6 +293,26 @@ class SQLiteIntelDatabase(BaseDatabase):
             """, (status, entity_key, url))
             conn.commit()
 
+    def save_screenshot_queue(self, tasks: List[Dict[str, str]]):
+        import json
+        with self._get_conn() as conn:
+            conn.execute("""
+                INSERT OR REPLACE INTO metadata (key, value)
+                VALUES (?, ?)
+            """, ("screenshot_queue", json.dumps(tasks)))
+            conn.commit()
+
+    def load_screenshot_queue(self) -> List[Dict[str, str]]:
+        import json
+        with self._get_conn() as conn:
+            row = conn.execute("SELECT value FROM metadata WHERE key = ?", ("screenshot_queue",)).fetchone()
+            if row:
+                try:
+                    return json.loads(row["value"])
+                except Exception:
+                    pass
+        return []
+
 
 class MongoIntelDatabase(BaseDatabase):
     def __init__(self, connection_uri: str = "mongodb://localhost:27017"):
@@ -392,6 +418,19 @@ class MongoIntelDatabase(BaseDatabase):
             {"_id": entity_key, "urls.url": url},
             {"$set": {"urls.$.status": status}}
         )
+
+    def save_screenshot_queue(self, tasks: List[Dict[str, str]]):
+        self.db.metadata.replace_one(
+            {"_id": "screenshot_queue"},
+            {"_id": "screenshot_queue", "value": tasks},
+            upsert=True
+        )
+
+    def load_screenshot_queue(self) -> List[Dict[str, str]]:
+        doc = self.db.metadata.find_one({"_id": "screenshot_queue"})
+        if doc and "value" in doc:
+            return doc["value"]
+        return []
 
     def get_unified_data(self) -> Dict[str, Any]:
         forums_groups = {}

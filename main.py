@@ -34,7 +34,7 @@ from flask import Flask, render_template, jsonify, request, make_response
 # Import threat location library
 from onion_explorer import ThreatLocationClient
 from onion_explorer.exporters import export_to_json, export_to_csv
-from onion_explorer.screenshot_worker import start_screenshot_worker, queue_url_for_screenshot
+from onion_explorer.screenshot_worker import start_screenshot_worker, stop_screenshot_worker, queue_url_for_screenshot, get_screenshot_worker_status
 from monitors import ransomfeed, ransomelook, ransomelive, github_feed, telegram_checker, watchguard
 
 # ---------- Configuration ----------
@@ -1049,6 +1049,26 @@ def api_screenshot_scan_all_online():
                 
     log.info(f"⚡ [Scan All Online] Queued {queued_count} online URLs alphabetically for screenshot check.")
     return jsonify({"status": "queued", "count": queued_count})
+
+
+@app.route("/api/screenshot/status", methods=["GET"])
+def api_screenshot_status():
+    """Return screenshot worker running and queue size status."""
+    return jsonify(get_screenshot_worker_status())
+
+
+@app.route("/api/screenshot/pause", methods=["POST"])
+def api_screenshot_pause():
+    """Stop/Pause the background screenshot worker thread."""
+    stop_screenshot_worker()
+    return jsonify({"status": "paused", "running": False})
+
+
+@app.route("/api/screenshot/resume", methods=["POST"])
+def api_screenshot_resume():
+    """Start/Resume the background screenshot worker thread."""
+    start_screenshot_worker()
+    return jsonify({"status": "resumed", "running": True})
 
 
 @app.route("/api/url/analyst_update", methods=["POST"])

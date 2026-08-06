@@ -158,6 +158,29 @@ def capture_screenshot_task(entity_key: str, url: str) -> bool:
 
     return success
 
+def save_queue_to_db():
+    try:
+        db = get_database()
+        tasks = list(task_queue.queue)
+        db.save_screenshot_queue(tasks)
+    except Exception as e:
+        logger.error(f"Failed to persist queue to DB: {e}")
+
+def load_queue_from_db():
+    try:
+        db = get_database()
+        tasks = db.load_screenshot_queue()
+        with tasks_lock:
+            for t in tasks:
+                task_id = f"{t['entity_key']}:{t['url']}"
+                if task_id not in active_tasks:
+                    active_tasks.add(task_id)
+                    task_queue.put(t)
+        if tasks:
+            log_worker_event(f"💾 Loaded and restored {len(tasks)} pending screenshot tasks from database.")
+    except Exception as e:
+        logger.error(f"Failed to load queue from DB: {e}")
+
 def queue_url_for_screenshot(entity_key: str, url: str, force: bool = False):
     """Adds a location URL to the verification and screenshot task queue."""
     if not url or not url.startswith("http"):
@@ -174,6 +197,7 @@ def queue_url_for_screenshot(entity_key: str, url: str, force: bool = False):
             return
         active_tasks.add(task_id)
         task_queue.put({"entity_key": entity_key, "url": url})
+        save_queue_to_db()
         log_worker_event(f"📥 [Screenshot Queue] Added task: {url}")
 
 def worker_loop():
@@ -186,6 +210,7 @@ def worker_loop():
             task = task_queue.get(timeout=2)
             entity_key = task["entity_key"]
             url = task["url"]
+            save_queue_to_db()
             
             try:
                 capture_screenshot_task(entity_key, url)
@@ -196,6 +221,7 @@ def worker_loop():
                     task_id = f"{entity_key}:{url}"
                     active_tasks.discard(task_id)
                 task_queue.task_done()
+                save_queue_to_db()
         except Empty:
             continue
         except Exception as e:
@@ -206,6 +232,8 @@ def start_screenshot_worker():
     """Initializes and runs the screenshot queue worker thread."""
     global worker_thread, running
     running = True
+    # Restore queue first
+    load_queue_from_db()
     if worker_thread is None or not worker_thread.is_alive():
         worker_thread = threading.Thread(target=worker_loop, daemon=True, name="ScreenshotWorker")
         worker_thread.start()
@@ -219,3 +247,10 @@ def stop_screenshot_worker():
         worker_thread.join(timeout=5)
         worker_thread = None
         log_worker_event("🛑 Screenshot worker thread stopped.")
+
+def get_screenshot_worker_status() -> dict:
+    global worker_thread, running
+    return {
+        "running": bool(worker_thread and worker_thread.is_alive() and running),
+        "queue_size": task_queue.qsize()
+    }
