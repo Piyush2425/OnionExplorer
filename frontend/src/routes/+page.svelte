@@ -19,7 +19,7 @@
 	});
 
 	let recentLogs = $state([]);
-	let expandedKeys = $state(new Set());
+	let expandedKeys = $state({});
 	let scanStatuses = $state({}); // { url: 'queued' | 'processing' }
 
 	// Modals & Menu Popups
@@ -244,11 +244,7 @@
 
 	// ═══ LOCAL EVENTS ═══
 	function toggleRow(key) {
-		if (expandedKeys.has(key)) {
-			expandedKeys.delete(key);
-		} else {
-			expandedKeys.add(key);
-		}
+		expandedKeys[key] = !expandedKeys[key];
 	}
 
 	function openScreenshot(img, caption) {
@@ -566,11 +562,11 @@
 						<!-- svelte-ignore a11y_click_events_have_key_events -->
 						<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 						<tr
-							class="entity-row {expandedKeys.has(ent.key) ? 'expanded' : ''}"
+							class="entity-row {expandedKeys[ent.key] ? 'expanded' : ''}"
 							onclick={() => toggleRow(ent.key)}
 						>
 							<td class="arrow-cell">
-								<span class="expand-arrow">{expandedKeys.has(ent.key) ? '▼' : '▶'}</span>
+								<span class="expand-arrow">{expandedKeys[ent.key] ? '▼' : '▶'}</span>
 							</td>
 							<td class="name-cell">
 								<strong>{ent.name}</strong>
@@ -604,7 +600,7 @@
 						</tr>
 
 						<!-- Expanded URLs Subtable Details Sheet -->
-						{#if expandedKeys.has(ent.key)}
+						{#if expandedKeys[ent.key]}
 							<tr class="details-row visible" id="details-{ent.key}">
 								<td colspan="6">
 									<div class="details-content">
