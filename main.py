@@ -1014,6 +1014,40 @@ def api_screenshot_check():
     return jsonify({"status": "queued"})
 
 
+@app.route("/api/screenshot/scan_all_online", methods=["POST"])
+def api_screenshot_scan_all_online():
+    """Manually trigger check & screenshot verification for all online onion URLs."""
+    data = build_unified_data()
+    queued_count = 0
+    
+    # Iterate Forums/Groups
+    for key, val in data.get("forums_groups", {}).items():
+        if val.get("sector") == "telegram_links" or "telegram" in key.lower():
+            continue
+        for u in val.get("urls", []):
+            url_str = u.get("url", "")
+            if "t.me" in url_str.lower() or "telegram.me" in url_str.lower():
+                continue
+            if u.get("status") == "Online" or u.get("status") == "Up":
+                queue_url_for_screenshot(key, url_str, force=True)
+                queued_count += 1
+                
+    # Iterate Markets
+    for key, val in data.get("markets", {}).items():
+        if val.get("sector") == "telegram_links" or "telegram" in key.lower():
+            continue
+        for u in val.get("urls", []):
+            url_str = u.get("url", "")
+            if "t.me" in url_str.lower() or "telegram.me" in url_str.lower():
+                continue
+            if u.get("status") == "Online" or u.get("status") == "Up":
+                queue_url_for_screenshot(key, url_str, force=True)
+                queued_count += 1
+                
+    log.info(f"⚡ [Scan All Online] Queued {queued_count} online URLs for screenshot check.")
+    return jsonify({"status": "queued", "count": queued_count})
+
+
 # ═══════════════════════════════════════════════
 #  ENTRY POINT
 # ═══════════════════════════════════════════════

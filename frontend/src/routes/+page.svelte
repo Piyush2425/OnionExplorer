@@ -29,6 +29,7 @@
 	let modalCaptionText = $state('');
 	let isLightTheme = $state(true);
 	let isLogsCollapsed = $state(false);
+	let isScanningAll = $state(false);
 
 	let logsTerminal = $state(null);
 
@@ -246,7 +247,21 @@
 			console.error('Error triggering link scan:', err);
 			const copy = { ...scanStatuses };
 			delete copy[url];
-			scanStatuses = copy;
+		}
+	}
+
+	async function scanAllOnline() {
+		try {
+			isScanningAll = true;
+			const res = await fetch('/api/screenshot/scan_all_online', { method: 'POST' });
+			if (res.ok) {
+				const data = await res.json();
+				recentLogs = [...recentLogs, `[INFO] 📸 Queued ${data.count} online Onion URLs for screenshot checks.`];
+			}
+			isScanningAll = false;
+		} catch (err) {
+			console.error('Failed to trigger scan all online:', err);
+			isScanningAll = false;
 		}
 	}
 
@@ -380,6 +395,15 @@
 				title="Run manual scrape across all darkweb sources"
 			>
 				⚡ Scrape All Sources
+			</button>
+			<button
+				class="scrape-all-btn"
+				onclick={scanAllOnline}
+				disabled={isScanningAll}
+				style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);"
+				title="Scan and verify all online onion links while you sleep"
+			>
+				📸 Scan All Online
 			</button>
 			<button class="theme-toggle-btn" onclick={toggleTheme}>
 				{isLightTheme ? '🌙 Dark UI' : '☀️ Light UI'}
