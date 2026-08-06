@@ -1261,6 +1261,22 @@ body.light-theme .nested-link:hover {
     color: #1d4ed8;
 }
 
+body.light-theme .log-line.info {
+    color: #1e3a8a;
+}
+
+body.light-theme .log-line.success {
+    color: #166534;
+}
+
+body.light-theme .log-line.warning {
+    color: #b45309;
+}
+
+body.light-theme .log-line.error {
+    color: #b91c1c;
+}
+
 /* ---------- Scrollbar ---------- */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: var(--bg-primary); }
