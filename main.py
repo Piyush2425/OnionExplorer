@@ -6,6 +6,7 @@ Serves the dashboard and runs background scrapers on a configurable schedule.
 
 import os
 import sys
+import re
 
 # Force UTF-8 encoding on Windows standard streams
 if hasattr(sys.stdout, "reconfigure"):
@@ -489,11 +490,15 @@ def queue_missing_screenshots():
         database = get_database()
         data = database.get_unified_data()
         count = 0
-        for sector in ["forums_groups", "markets", "telegram_links"]:
+        for sector in ["forums_groups", "markets"]:
             for key, ent in data.get(sector, {}).items():
                 for u in ent.get("urls", []):
+                    url_str = u.get("url", "")
+                    # Skip Telegram invite links
+                    if "t.me" in url_str.lower() or "telegram.me" in url_str.lower():
+                        continue
                     if not u.get("screenshot"):
-                        queue_url_for_screenshot(key, u.get("url"))
+                        queue_url_for_screenshot(key, url_str)
                         count += 1
         if count > 0:
             log.info(f"Queued {count} URLs for verification and screenshot capture.")
@@ -1011,6 +1016,9 @@ def api_screenshot_check():
     entity_key = req.get("entity_key")
     if not url or not entity_key:
         return jsonify({"error": "Missing url or entity_key"}), 400
+
+    if "t.me" in url.lower() or "telegram.me" in url.lower():
+        return jsonify({"error": "Telegram links cannot be screenshot verified."}), 400
 
     queue_url_for_screenshot(entity_key, url, force=True)
     return jsonify({"status": "queued"})

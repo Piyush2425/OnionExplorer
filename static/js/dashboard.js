@@ -707,26 +707,35 @@
                 return `<span class="source-tag ${cls}">${esc(label)}</span>`;
             }).join(' ');
 
+            const isTelegram = u.url.includes('t.me') || u.url.includes('telegram.me') || e.sector === 'telegram_links';
+            
             let screenshotHtml = '';
-            if (u.screenshot) {
-                screenshotHtml = `
-                    <div class="screenshot-thumb-container" onclick="openScreenshotModal('/static/screenshots/${esc(u.screenshot)}', '${esc(e.name)}: ${esc(u.url)}'); event.stopPropagation();">
-                        <img src="/static/screenshots/${esc(u.screenshot)}" class="screenshot-thumb" alt="Preview">
-                    </div>
-                `;
+            let checkBtnHtml = '';
+
+            if (isTelegram) {
+                screenshotHtml = `<span class="text-muted" style="font-size: 0.75rem; opacity: 0.6;">N/A (Telegram)</span>`;
+                checkBtnHtml = `<span class="text-muted" style="font-size: 0.75rem; opacity: 0.6;">N/A</span>`;
             } else {
-                screenshotHtml = `
-                    <div class="screenshot-thumb-container" style="cursor: default;" onclick="event.stopPropagation();">
-                        <div class="screenshot-placeholder">No Preview</div>
-                    </div>
+                if (u.screenshot) {
+                    screenshotHtml = `
+                        <div class="screenshot-thumb-container" onclick="openScreenshotModal('/static/screenshots/${esc(u.screenshot)}', '${esc(e.name)}: ${esc(u.url)}'); event.stopPropagation();">
+                            <img src="/static/screenshots/${esc(u.screenshot)}" class="screenshot-thumb" alt="Preview">
+                        </div>
+                    `;
+                } else {
+                    screenshotHtml = `
+                        <div class="screenshot-thumb-container" style="cursor: default;" onclick="event.stopPropagation();">
+                            <div class="screenshot-placeholder">No Preview</div>
+                        </div>
+                    `;
+                }
+
+                checkBtnHtml = `
+                    <button class="check-status-btn" onclick="triggerScreenshotCheck('${esc(e.key)}', '${esc(u.url)}', this); event.stopPropagation();" title="Verify status and take screenshot">
+                        🔄 Re-Check
+                    </button>
                 `;
             }
-
-            const checkBtnHtml = `
-                <button class="check-status-btn" onclick="triggerScreenshotCheck('${esc(e.key)}', '${esc(u.url)}', this); event.stopPropagation();" title="Verify status and take screenshot">
-                    🔄 Re-Check
-                </button>
-            `;
 
             return `
                 <tr>

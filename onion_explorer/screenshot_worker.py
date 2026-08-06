@@ -133,6 +133,10 @@ def queue_url_for_screenshot(entity_key: str, url: str, force: bool = False):
     if not url or not url.startswith("http"):
         return
 
+    # Check and reject Telegram links
+    if "t.me" in url.lower() or "telegram.me" in url.lower():
+        return
+
     with tasks_lock:
         task_id = f"{entity_key}:{url}"
         if task_id in active_tasks and not force:
