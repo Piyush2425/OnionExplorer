@@ -100,7 +100,7 @@ def make_screenshot_driver(use_tor: bool = True) -> webdriver.Firefox:
     except Exception as gdm_err:
         logger.warning(f"GeckoDriverManager install failed: {gdm_err}. Attempting default system geckodriver path fallback.")
         driver = webdriver.Firefox(options=opts)
-    driver.set_page_load_timeout(20) # Wait limit of 20 seconds
+    driver.set_page_load_timeout(60) # Long timeout to allow slow Tor loading
     return driver
 
 def capture_screenshot_task(entity_key: str, url: str) -> bool:
