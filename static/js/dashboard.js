@@ -34,6 +34,21 @@
         checkScraperStatus();
         fetchLogs();
         setInterval(fetchLogs, 2500);
+
+        // Screenshot modal close events
+        const modal = document.getElementById('screenshotModal');
+        const closeBtn = document.getElementById('modalClose');
+        if (closeBtn && modal) {
+            closeBtn.onclick = function() {
+                modal.style.display = 'none';
+            };
+            // Close modal when user clicks outside the modal content area
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.style.display = 'none';
+                }
+            });
+        }
     });
 
     async function loadScraperConfig() {
@@ -692,6 +707,27 @@
                 return `<span class="source-tag ${cls}">${esc(label)}</span>`;
             }).join(' ');
 
+            let screenshotHtml = '';
+            if (u.screenshot) {
+                screenshotHtml = `
+                    <div class="screenshot-thumb-container" onclick="openScreenshotModal('/static/screenshots/${esc(u.screenshot)}', '${esc(e.name)}: ${esc(u.url)}'); event.stopPropagation();">
+                        <img src="/static/screenshots/${esc(u.screenshot)}" class="screenshot-thumb" alt="Preview">
+                    </div>
+                `;
+            } else {
+                screenshotHtml = `
+                    <div class="screenshot-thumb-container" style="cursor: default;" onclick="event.stopPropagation();">
+                        <div class="screenshot-placeholder">No Preview</div>
+                    </div>
+                `;
+            }
+
+            const checkBtnHtml = `
+                <button class="check-status-btn" onclick="triggerScreenshotCheck('${esc(e.key)}', '${esc(u.url)}', this); event.stopPropagation();" title="Verify status and take screenshot">
+                    🔄 Re-Check
+                </button>
+            `;
+
             return `
                 <tr>
                     <td class="nested-url-cell">
@@ -702,11 +738,13 @@
                     <td>
                         <span class="status-indicator ${isOnline ? 'online' : 'offline'}">
                             <span class="status-pip ${isOnline ? 'online' : 'offline'}"></span>
-                            ${isOnline ? 'Online' : 'Offline'}
+                            ${isOnline ? 'Up' : 'Down'}
                         </span>
                     </td>
                     <td><div class="source-tags">${urlSourceBadges}</div></td>
                     <td class="last-visit-cell">${esc(u.last_visit) || 'N/A'}</td>
+                    <td>${screenshotHtml}</td>
+                    <td>${checkBtnHtml}</td>
                 </tr>
             `;
         }).join('');
@@ -722,10 +760,12 @@
                                     <th>Status</th>
                                     <th>Discovered Sources</th>
                                     <th>Last Visited</th>
+                                    <th style="width: 120px;">Screen</th>
+                                    <th style="width: 100px;">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                ${nestedRowsHtml || '<tr><td colspan="4" class="no-urls-placeholder">No links matching the active filters.</td></tr>'}
+                                ${nestedRowsHtml || '<tr><td colspan="6" class="no-urls-placeholder">No links matching the active filters.</td></tr>'}
                             </tbody>
                         </table>
                     </div>
@@ -787,6 +827,66 @@
         }).catch(err => {
             console.error('Failed to copy: ', err);
         });
+    };
+
+    // ═══ SCREENSHOT LIGHTBOX & CHECK TRIGGER ═══
+    window.openScreenshotModal = function(imgSrc, caption) {
+        const modal = document.getElementById('screenshotModal');
+        const modalImg = document.getElementById('modalImg');
+        const captionText = document.getElementById('modalCaption');
+        if (modal && modalImg && captionText) {
+            modal.style.display = 'block';
+            modalImg.src = imgSrc;
+            captionText.textContent = caption;
+        }
+    };
+
+    window.triggerScreenshotCheck = async function(entityKey, url, btn) {
+        if (!btn) return;
+        const originalText = btn.innerHTML;
+        try {
+            btn.disabled = true;
+            btn.innerHTML = '🔄 Queued...';
+            btn.style.opacity = '0.7';
+
+            const resp = await fetch('/api/screenshot/check', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ entity_key: entityKey, url: url })
+            });
+            const res = await resp.json();
+            if (res.status === 'queued') {
+                btn.innerHTML = '⏳ Processing...';
+                
+                // Poll database state for a maximum of 30 seconds
+                let checkCount = 0;
+                const checkInterval = setInterval(async () => {
+                    checkCount++;
+                    await loadData();
+                    
+                    // Verify if screenshot is now present for the url
+                    const data = rawData.find(item => item.key === entityKey);
+                    if (data) {
+                        const targetUrl = data.urls.find(u => u.url === url);
+                        if (targetUrl && (targetUrl.screenshot || checkCount >= 12)) {
+                            clearInterval(checkInterval);
+                            btn.disabled = false;
+                            btn.innerHTML = '🔄 Re-Check';
+                            btn.style.opacity = '1';
+                        }
+                    }
+                }, 2500);
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+                btn.style.opacity = '1';
+            }
+        } catch (err) {
+            console.error('Failed to trigger screenshot check:', err);
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+            btn.style.opacity = '1';
+        }
     };
 
     // ═══ UTILS ═══

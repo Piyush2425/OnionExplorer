@@ -21,6 +21,9 @@ class BaseDatabase:
     def get_meta(self) -> Dict[str, Any]:
         raise NotImplementedError()
 
+    def update_location_screenshot(self, entity_key: str, url: str, screenshot_path: str, status: str):
+        raise NotImplementedError()
+
 
 class SQLiteIntelDatabase(BaseDatabase):
     def __init__(self, db_path: str):
@@ -56,6 +59,7 @@ class SQLiteIntelDatabase(BaseDatabase):
                     last_visit TEXT,
                     server_info TEXT,
                     url_type TEXT,
+                    screenshot TEXT,
                     FOREIGN KEY (entity_key) REFERENCES entities (key) ON DELETE CASCADE,
                     UNIQUE(entity_key, url)
                 )
@@ -66,6 +70,13 @@ class SQLiteIntelDatabase(BaseDatabase):
                     value TEXT NOT NULL
                 )
             """)
+            
+            # Migration check: add screenshot column to locations if missing
+            try:
+                conn.execute("ALTER TABLE locations ADD COLUMN screenshot TEXT")
+            except sqlite3.OperationalError:
+                pass
+                
             conn.commit()
 
     def save_entity(self, key: str, name: str, sector: str, type_val: str, sources: List[str], urls: List[Dict[str, Any]], stats: Dict[str, Any] = None):
@@ -82,23 +93,29 @@ class SQLiteIntelDatabase(BaseDatabase):
                     stats = excluded.stats
             """, (key, name, sector, type_val, json.dumps(sources), json.dumps(stats or {})))
 
+            # Fetch existing screenshots to preserve them
+            existing_rows = conn.execute("SELECT url, screenshot FROM locations WHERE entity_key = ?", (key,)).fetchall()
+            existing_screenshots = {row["url"]: row["screenshot"] for row in existing_rows if row["screenshot"]}
+
             # Clear and rebuild locations to stay fully synchronized with feeds
             conn.execute("DELETE FROM locations WHERE entity_key = ?", (key,))
             
             for u in urls:
+                url_str = u.get("url", "")
                 conn.execute("""
-                    INSERT OR REPLACE INTO locations (entity_key, url, status, source, fqdn, version, last_visit, server_info, url_type)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT OR REPLACE INTO locations (entity_key, url, status, source, fqdn, version, last_visit, server_info, url_type, screenshot)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     key,
-                    u.get("url", ""),
+                    url_str,
                     u.get("status", "Unknown"),
                     u.get("source", ""),
                     u.get("fqdn", ""),
                     u.get("version", ""),
                     u.get("last_visit", ""),
                     u.get("server_info", ""),
-                    u.get("url_type", "")
+                    u.get("url_type", ""),
+                    u.get("screenshot") or existing_screenshots.get(url_str)
                 ))
             conn.commit()
 
@@ -125,22 +142,28 @@ class SQLiteIntelDatabase(BaseDatabase):
                         stats = excluded.stats
                 """, (key, name, sector, type_val, json.dumps(sources), json.dumps(stats or {})))
 
+                # Fetch existing screenshots to preserve them
+                existing_rows = conn.execute("SELECT url, screenshot FROM locations WHERE entity_key = ?", (key,)).fetchall()
+                existing_screenshots = {row["url"]: row["screenshot"] for row in existing_rows if row["screenshot"]}
+
                 conn.execute("DELETE FROM locations WHERE entity_key = ?", (key,))
                 
                 for u in urls:
+                    url_str = u.get("url", "")
                     conn.execute("""
-                        INSERT OR REPLACE INTO locations (entity_key, url, status, source, fqdn, version, last_visit, server_info, url_type)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        INSERT OR REPLACE INTO locations (entity_key, url, status, source, fqdn, version, last_visit, server_info, url_type, screenshot)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         key,
-                        u.get("url", ""),
+                        url_str,
                         u.get("status", "Unknown"),
                         u.get("source", ""),
                         u.get("fqdn", ""),
                         u.get("version", ""),
                         u.get("last_visit", ""),
                         u.get("server_info", ""),
-                        u.get("url_type", "")
+                        u.get("url_type", ""),
+                        u.get("screenshot") or existing_screenshots.get(url_str)
                     ))
             conn.commit()
 
@@ -167,7 +190,8 @@ class SQLiteIntelDatabase(BaseDatabase):
                         "version": l["version"],
                         "last_visit": l["last_visit"],
                         "server_info": l["server_info"],
-                        "url_type": l["url_type"]
+                        "url_type": l["url_type"],
+                        "screenshot": l["screenshot"]
                     })
                 
                 on = sum(1 for u in urls_list if u["status"] == "Online")
@@ -218,6 +242,15 @@ class SQLiteIntelDatabase(BaseDatabase):
                     pass
         return {}
 
+    def update_location_screenshot(self, entity_key: str, url: str, screenshot_path: str, status: str):
+        with self._get_conn() as conn:
+            conn.execute("""
+                UPDATE locations 
+                SET screenshot = ?, status = ?
+                WHERE entity_key = ? AND url = ?
+            """, (screenshot_path, status, entity_key, url))
+            conn.commit()
+
 
 class MongoIntelDatabase(BaseDatabase):
     def __init__(self, connection_uri: str = "mongodb://localhost:27017"):
@@ -227,6 +260,17 @@ class MongoIntelDatabase(BaseDatabase):
         self.client.server_info() # verify connection
 
     def save_entity(self, key: str, name: str, sector: str, type_val: str, sources: List[str], urls: List[Dict[str, Any]], stats: Dict[str, Any] = None):
+        existing = self.db.entities.find_one({"_id": key})
+        existing_screenshots = {}
+        if existing:
+            for u in existing.get("urls", []):
+                if u.get("screenshot"):
+                    existing_screenshots[u.get("url")] = u.get("screenshot")
+        
+        for u in urls:
+            if not u.get("screenshot") and u.get("url") in existing_screenshots:
+                u["screenshot"] = existing_screenshots[u.get("url")]
+
         self.db.entities.replace_one(
             {"_id": key},
             {
@@ -246,6 +290,19 @@ class MongoIntelDatabase(BaseDatabase):
         operations = []
         for item in batch:
             key = item["key"]
+            urls = item["urls"]
+            
+            existing = self.db.entities.find_one({"_id": key})
+            existing_screenshots = {}
+            if existing:
+                for u in existing.get("urls", []):
+                    if u.get("screenshot"):
+                        existing_screenshots[u.get("url")] = u.get("screenshot")
+            
+            for u in urls:
+                if not u.get("screenshot") and u.get("url") in existing_screenshots:
+                    u["screenshot"] = existing_screenshots[u.get("url")]
+
             operations.append(
                 pymongo.ReplaceOne(
                     {"_id": key},
@@ -256,13 +313,19 @@ class MongoIntelDatabase(BaseDatabase):
                         "type": item["type_val"],
                         "sources": item["sources"],
                         "stats": item["stats"] or {},
-                        "urls": item["urls"]
+                        "urls": urls
                     },
                     upsert=True
                 )
             )
         if operations:
             self.db.entities.bulk_write(operations)
+
+    def update_location_screenshot(self, entity_key: str, url: str, screenshot_path: str, status: str):
+        self.db.entities.update_one(
+            {"_id": entity_key, "urls.url": url},
+            {"$set": {"urls.$.screenshot": screenshot_path, "urls.$.status": status}}
+        )
 
     def get_unified_data(self) -> Dict[str, Any]:
         forums_groups = {}

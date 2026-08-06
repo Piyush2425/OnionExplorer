@@ -1356,3 +1356,120 @@ body.light-theme .settings-group select {
 .log-line.success { color: var(--accent-green); }
 .log-line.warning { color: var(--accent-yellow); }
 .log-line.error { color: var(--accent-red); }
+
+/* ---------- Screenshot Thumbnail Preview ---------- */
+.screenshot-thumb-container {
+    position: relative;
+    width: 100px;
+    height: 60px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-subtle);
+    background: rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+    cursor: zoom-in;
+    transition: transform var(--transition-fast), border-color var(--transition-fast);
+}
+
+.screenshot-thumb-container:hover {
+    transform: scale(1.05);
+    border-color: var(--border-accent);
+}
+
+.screenshot-thumb {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.screenshot-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+/* ---------- Re-check Action button inside link table ---------- */
+.check-status-btn {
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.72rem;
+    padding: 2px 6px;
+    transition: all var(--transition-fast);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.check-status-btn:hover {
+    color: var(--accent-cyan);
+    border-color: var(--border-accent);
+    background: rgba(0, 242, 254, 0.05);
+}
+
+/* ---------- Lightbox Modal ---------- */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 10000;
+    padding-top: 50px;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(6, 9, 14, 0.95);
+    backdrop-filter: blur(10px);
+}
+
+.modal-content {
+    margin: auto;
+    display: block;
+    width: 80%;
+    max-width: 1200px;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-medium);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+    animation: zoom var(--transition-fast) ease-out;
+}
+
+@keyframes zoom {
+    from { transform: scale(0.9); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+.modal-close {
+    position: absolute;
+    top: 20px;
+    right: 35px;
+    color: var(--text-muted);
+    font-size: 40px;
+    font-weight: bold;
+    transition: color var(--transition-fast);
+    cursor: pointer;
+}
+
+.modal-close:hover,
+.modal-close:focus {
+    color: var(--text-primary);
+    text-decoration: none;
+    cursor: pointer;
+}
+
+#modalCaption {
+    margin: auto;
+    display: block;
+    width: 80%;
+    max-width: 1200px;
+    text-align: center;
+    color: var(--text-muted);
+    padding: 15px 0;
+    font-size: 0.85rem;
+    font-weight: 500;
+}

@@ -33,6 +33,7 @@ from flask import Flask, render_template, jsonify, request, make_response
 # Import threat location library
 from onion_explorer import ThreatLocationClient
 from onion_explorer.exporters import export_to_json, export_to_csv
+from onion_explorer.screenshot_worker import start_screenshot_worker, queue_url_for_screenshot
 from monitors import ransomfeed, ransomelook, ransomelive, github_feed, telegram_checker, watchguard
 
 # ---------- Configuration ----------
@@ -473,10 +474,31 @@ def sync_data_to_database():
         database.save_meta(data.get("meta", {}))
         log.info(f"Database sync complete. Synced {len(batch)} entities.")
         
+        # Queue missing screenshots for verification
+        queue_missing_screenshots()
+        
         # Clean up temporary JSON/CSV cache files to save space and rely on structured DB
         cleanup_raw_data_files()
     except Exception as e:
         log.error(f"Failed to sync data to database: {e}")
+
+def queue_missing_screenshots():
+    """Find all database locations that do not have a screenshot captured, and queue them."""
+    try:
+        from onion_explorer.database import get_database
+        database = get_database()
+        data = database.get_unified_data()
+        count = 0
+        for sector in ["forums_groups", "markets", "telegram_links"]:
+            for key, ent in data.get(sector, {}).items():
+                for u in ent.get("urls", []):
+                    if not u.get("screenshot"):
+                        queue_url_for_screenshot(key, u.get("url"))
+                        count += 1
+        if count > 0:
+            log.info(f"Queued {count} URLs for verification and screenshot capture.")
+    except Exception as e:
+        log.error(f"Failed to auto-queue screenshots: {e}")
 
 
 def cleanup_raw_data_files():
@@ -981,6 +1003,19 @@ def api_config():
         })
 
 
+@app.route("/api/screenshot/check", methods=["POST"])
+def api_screenshot_check():
+    """Manually trigger a check & screenshot for a single URL."""
+    req = request.get_json(silent=True) or {}
+    url = req.get("url")
+    entity_key = req.get("entity_key")
+    if not url or not entity_key:
+        return jsonify({"error": "Missing url or entity_key"}), 400
+
+    queue_url_for_screenshot(entity_key, url, force=True)
+    return jsonify({"status": "queued"})
+
+
 # ═══════════════════════════════════════════════
 #  ENTRY POINT
 # ═══════════════════════════════════════════════
@@ -992,6 +1027,9 @@ if __name__ == "__main__":
     log.info(f"  Scrape interval: {SCRAPE_INTERVAL_MINUTES} minutes")
     log.info(f"  Server         : http://localhost:5000")
     log.info("=" * 50)
+
+    # Start background screenshot worker
+    start_screenshot_worker()
 
     # Sync raw JSON data to database on startup
     try:
