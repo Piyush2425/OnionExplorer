@@ -9,10 +9,10 @@ from queue import Queue, Empty
 from typing import Dict, Any
 
 from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.firefox.options import Options as FirefoxOptions
+from selenium.webdriver.firefox.service import Service as FirefoxService
 from selenium.common.exceptions import WebDriverException
-from webdriver_manager.chrome import ChromeDriverManager
+from webdriver_manager.firefox import GeckoDriverManager
 
 from onion_explorer.database import get_database
 
@@ -50,32 +50,29 @@ def get_url_md5(url: str) -> str:
     """Compute MD5 hex hash of a URL."""
     return hashlib.md5(url.encode("utf-8")).hexdigest()
 
-def make_screenshot_driver(use_tor: bool = True) -> webdriver.Chrome:
-    """Instantiate a headless Chrome web driver with optional SOCKS5 proxy configuration."""
-    opts = Options()
-    opts.add_argument("--headless=new")
-    opts.add_argument("--no-sandbox")
-    opts.add_argument("--disable-dev-shm-usage")
-    opts.add_argument("--disable-gpu")
-    opts.add_argument("--window-size=1200,750")
-    opts.add_argument("--disable-blink-features=AutomationControlled")
-    opts.add_experimental_option("excludeSwitches", ["enable-automation"])
-    opts.add_argument(
-        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
-    )
-
+def make_screenshot_driver(use_tor: bool = True) -> webdriver.Firefox:
+    """Instantiate a headless Firefox web driver with optional SOCKS5 proxy configuration."""
+    opts = FirefoxOptions()
+    opts.add_argument("-headless")
+    
+    # Configure user-agent in Firefox preferences
+    opts.set_preference("general.useragent.override", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0")
+    
     if use_tor:
-        logger.info(f"Routing browser automation traffic via Tor SOCKS5 proxy ({TOR_HOST}:{TOR_PORT})...")
-        opts.add_argument(f"--proxy-server=socks5://{TOR_HOST}:{TOR_PORT}")
+        logger.info(f"Routing Firefox browser automation traffic via Tor SOCKS5 proxy ({TOR_HOST}:{TOR_PORT})...")
+        opts.set_preference("network.proxy.type", 1)
+        opts.set_preference("network.proxy.socks", TOR_HOST)
+        opts.set_preference("network.proxy.socks_port", TOR_PORT)
+        opts.set_preference("network.proxy.socks_version", 5)
+        opts.set_preference("network.proxy.socks_remote_dns", True) # Force DNS resolution via Tor
 
-    service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=opts)
-    driver.set_page_load_timeout(45) # Long timeout for slow darkweb onions
+    service = FirefoxService(GeckoDriverManager().install())
+    driver = webdriver.Firefox(service=service, options=opts)
+    driver.set_page_load_timeout(60) # Long timeout to allow slow Tor loading
     return driver
 
 def capture_screenshot_task(entity_key: str, url: str) -> bool:
-    """Loads a URL via Chrome driver, takes screenshot, and updates DB status."""
+    """Loads a URL via Firefox driver, takes screenshot, and updates DB status."""
     use_tor = is_tor_active()
     if not use_tor:
         logger.warning(f"Tor SOCKS5 proxy not detected on {TOR_HOST}:{TOR_PORT}. Verification will fallback to direct connection.")
@@ -90,11 +87,12 @@ def capture_screenshot_task(entity_key: str, url: str) -> bool:
 
     try:
         driver = make_screenshot_driver(use_tor=use_tor)
-        logger.info(f"🚀 [Screenshot] Launching browser for: {url}")
+        logger.info(f"🚀 [Screenshot] Launching Firefox for: {url}")
         driver.get(url)
         
-        # Give dynamic contents a few seconds to settle
-        time.sleep(4)
+        # Wait exactly 30 seconds for dynamic content to load completely
+        logger.info(f"⏳ Waiting 30 seconds for page to load completely: {url}")
+        time.sleep(30)
         
         # Save screenshot
         driver.save_screenshot(save_path)
@@ -102,7 +100,7 @@ def capture_screenshot_task(entity_key: str, url: str) -> bool:
         success = True
         status_val = "Online"
     except WebDriverException as wde:
-        logger.error(f"❌ [Screenshot] Browser connection error for {url}: {wde}")
+        logger.error(f"❌ [Screenshot] Firefox connection error for {url}: {wde}")
         # Delete stale screenshot on load failure
         if os.path.exists(save_path):
             try:

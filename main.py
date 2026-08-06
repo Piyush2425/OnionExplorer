@@ -475,35 +475,10 @@ def sync_data_to_database():
         database.save_meta(data.get("meta", {}))
         log.info(f"Database sync complete. Synced {len(batch)} entities.")
         
-        # Queue missing screenshots for verification
-        queue_missing_screenshots()
-        
         # Clean up temporary JSON/CSV cache files to save space and rely on structured DB
         cleanup_raw_data_files()
     except Exception as e:
         log.error(f"Failed to sync data to database: {e}")
-
-def queue_missing_screenshots():
-    """Find all database locations that do not have a screenshot captured, and queue them."""
-    try:
-        from onion_explorer.database import get_database
-        database = get_database()
-        data = database.get_unified_data()
-        count = 0
-        for sector in ["forums_groups", "markets"]:
-            for key, ent in data.get(sector, {}).items():
-                for u in ent.get("urls", []):
-                    url_str = u.get("url", "")
-                    # Skip Telegram invite links
-                    if "t.me" in url_str.lower() or "telegram.me" in url_str.lower():
-                        continue
-                    if not u.get("screenshot"):
-                        queue_url_for_screenshot(key, url_str)
-                        count += 1
-        if count > 0:
-            log.info(f"Queued {count} URLs for verification and screenshot capture.")
-    except Exception as e:
-        log.error(f"Failed to auto-queue screenshots: {e}")
 
 
 def cleanup_raw_data_files():
