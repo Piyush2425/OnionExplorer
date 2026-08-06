@@ -46,14 +46,18 @@ def is_tor_active() -> bool:
     except Exception:
         return False
 
+# Set to False to open visible browser windows, or True to run silently in the background
+HEADLESS = False
+
 def get_url_md5(url: str) -> str:
     """Compute MD5 hex hash of a URL."""
     return hashlib.md5(url.encode("utf-8")).hexdigest()
 
 def make_screenshot_driver(use_tor: bool = True) -> webdriver.Firefox:
-    """Instantiate a headless Firefox web driver with optional SOCKS5 proxy configuration."""
+    """Instantiate a Firefox web driver with optional SOCKS5 proxy configuration."""
     opts = FirefoxOptions()
-    opts.add_argument("-headless")
+    if HEADLESS:
+        opts.add_argument("-headless")
     
     # Configure user-agent in Firefox preferences
     opts.set_preference("general.useragent.override", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0")
