@@ -289,6 +289,18 @@
 		}
 	}
 
+	function getLastScannedDate(ent) {
+		const visits = (ent.urls || [])
+			.map(u => u.last_visit)
+			.filter(v => v && v !== 'N/A' && v.trim() !== '');
+		if (visits.length === 0) {
+			return 'Not scanned yet';
+		}
+		// Sort lexicographically descending so the latest date is first
+		visits.sort((a, b) => b.localeCompare(a));
+		return visits[0];
+	}
+
 	// ═══ LOCAL EVENTS ═══
 	function toggleRow(key) {
 		expandedKeys[key] = !expandedKeys[key];
@@ -606,7 +618,7 @@
 					<tr>
 						<th style="width: 40px;"></th>
 						<th>Threat Actor / Entity</th>
-						<th>Sector / Type</th>
+						<th>Last Scanned</th>
 						<th>Combined Status</th>
 						<th>Sources</th>
 						<th>Link Count</th>
@@ -627,10 +639,8 @@
 							<td class="name-cell">
 								<strong>{ent.name}</strong>
 							</td>
-							<td>
-								<span class="sector-badge {ent.sector || 'forums_groups'}">
-									{#if ent.sector === 'forums_groups'}Forum{:else if ent.sector === 'markets'}Market{:else}Telegram{/if}
-								</span>
+							<td class="last-scanned-cell" style="font-family: var(--font-mono); font-size: 0.8rem;">
+								{getLastScannedDate(ent)}
 							</td>
 							<td>
 								<div class="status-indicator {getStatusClass(ent)}">
