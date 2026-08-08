@@ -962,10 +962,8 @@ def api_export_html():
                 url_status = url_info.get("status", "Unknown")
                 is_online = (url_status == "Online" or url_status == "Up")
                 url_source = url_info.get("source", "")
-                # Filters
-                if status_filter == "online" and not is_online:
-                    continue
-                if status_filter == "offline" and is_online:
+                # Only include Online / Up links in HTML report
+                if not is_online:
                     continue
                 if source_filter != "all" and url_source != source_filter:
                     continue
@@ -995,6 +993,9 @@ def api_export_html():
                     "last_visit": url_info.get("last_visit", "") or "N/A",
                     "screenshot_b64": img_src
                 })
+
+    # Sort rows alphabetically by entity/group name (A-Z)
+    rows.sort(key=lambda x: x["entity_name"].lower())
 
     html_content = export_to_html(rows, scope_label, status_filter, source_filter)
     
