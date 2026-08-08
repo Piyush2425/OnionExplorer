@@ -57,6 +57,15 @@ def serve():
 
     start_background_scraper()
     
+    # Auto-open dashboard in default browser after SvelteKit initializes
+    def auto_open_browser():
+        time.sleep(2.5)
+        log.info("🌐 Automatically opening OnionExplorer dashboard in your browser...")
+        import webbrowser
+        webbrowser.open("http://localhost:5173")
+
+    threading.Thread(target=auto_open_browser, daemon=True).start()
+    
     try:
         app.run(debug=False, host="0.0.0.0", port=5000)
     finally:
