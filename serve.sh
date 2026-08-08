@@ -6,6 +6,13 @@ echo ""
 echo "🧅 Starting OnionExplorer Threat Intelligence Console..."
 echo ""
 
+# Load NVM (Node Version Manager) if available
+export NVM_DIR="$HOME/.nvm"
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+    . "$NVM_DIR/nvm.sh"
+    nvm use 20 --silent
+fi
+
 # Activate virtual environment
 source venv/bin/activate
 
