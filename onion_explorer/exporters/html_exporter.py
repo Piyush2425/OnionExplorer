@@ -30,7 +30,7 @@ def export_to_html(rows: List[Dict[str, Any]], scope_label: str, status_filter: 
             <td><span class="status-badge {badge_class}">{r['status']}</span></td>
             <td><span style="background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem;">{r['source']}</span></td>
             <td>{r['last_visit']}</td>
-            <td>{screenshot_cell}</td>
+            <td class="screenshot-cell">{screenshot_cell}</td>
         </tr>
         """)
 
@@ -147,10 +147,14 @@ def export_to_html(rows: List[Dict[str, Any]], scope_label: str, status_filter: 
             color: #991b1b;
         }}
         
+        .screenshot-cell {{
+            text-align: center;
+        }}
         .thumbnail-container {{
-            position: relative;
-            width: 90px;
-            height: 55px;
+            display: inline-block;
+            vertical-align: middle;
+            width: 120px;
+            height: 75px;
             overflow: hidden;
             border-radius: 6px;
             border: 1px solid #cbd5e1;
@@ -164,7 +168,8 @@ def export_to_html(rows: List[Dict[str, Any]], scope_label: str, status_filter: 
         .thumbnail {{
             width: 100%;
             height: 100%;
-            object-fit: cover;
+            object-fit: contain;
+            background-color: #f8fafc;
         }}
         .no-preview {{
             font-size: 0.78rem;
@@ -243,7 +248,7 @@ def export_to_html(rows: List[Dict[str, Any]], scope_label: str, status_filter: 
                         <th>Status</th>
                         <th>Source Feed</th>
                         <th>Last Checked</th>
-                        <th>Screenshot Capture</th>
+                        <th class="screenshot-cell">Screenshot Capture</th>
                     </tr>
                 </thead>
                 <tbody>

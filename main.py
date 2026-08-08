@@ -476,6 +476,9 @@ def sync_data_to_database():
         # Save metadata
         database.save_meta(data.get("meta", {}))
         log.info(f"Database sync complete. Synced {len(batch)} entities.")
+        log.info("=" * 60)
+        log.info("📢 [Sync] All links data stored, ready for scanning!")
+        log.info("=" * 60)
         
         # Clean up temporary JSON/CSV cache files to save space and rely on structured DB
         cleanup_raw_data_files()
