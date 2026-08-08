@@ -222,6 +222,14 @@ def worker_loop():
                     active_tasks.discard(task_id)
                 task_queue.task_done()
                 save_queue_to_db()
+                
+            # Rate limit scans to 1-minute interval per link
+            if running:
+                log_worker_event("⏳ Scan task completed. Sleeping 60 seconds before next scan.")
+                for _ in range(60):
+                    if not running:
+                        break
+                    time.sleep(1)
         except Empty:
             continue
         except Exception as e:

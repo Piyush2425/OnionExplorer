@@ -83,20 +83,25 @@ SECRET_KEY=generate-a-secure-random-key-here
 
 ### 🚀 Start the Server (Every Time)
 
-After completing the one-time setup above, simply run **this single command** to start the dashboard:
+After completing the one-time setup above, simply run **this single command** from the project root folder to start both the backend API and the frontend dashboard automatically:
 
 ```bash
 bash serve.sh
 ```
 
-> **Dashboard is live at**: `http://localhost:5000` (or `http://YOUR_SERVER_IP:5000`)
+Alternatively, you can start it directly via the Python CLI tool:
+```bash
+source venv/bin/activate
+pip install -e .
+onion serve
+```
+
+> **Dashboard is live at**: `http://localhost:5173` (Frontend Console with Proxy to Flask API on `http://127.0.0.1:5000`)
 
 ---
 
 ### 🛑 Stop the Server
-```bash
-pkill gunicorn
-```
+Simply press `CTRL+C` in your terminal to shut down both the Flask API server and SvelteKit dev server gracefully.
 
 
 ---

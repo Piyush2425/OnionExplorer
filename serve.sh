@@ -1,20 +1,16 @@
 #!/bin/bash
 # OnionExplorer — One-command startup script
+# Starts both Python Backend and SvelteKit Frontend together
 
 echo ""
-echo "╔══════════════════════════════════════════╗"
-echo "║       OnionExplorer — Starting...        ║"
-echo "╚══════════════════════════════════════════╝"
+echo "🧅 Starting OnionExplorer Threat Intelligence Console..."
 echo ""
 
 # Activate virtual environment
 source venv/bin/activate
 
-# Start Gunicorn production server (3 workers, background logging)
-nohup gunicorn --workers 3 --bind 0.0.0.0:5000 wsgi:app > data/logs/gunicorn.log 2>&1 &
+# Install the package in editable mode if not already registered
+pip install -e .
 
-echo "✅ OnionExplorer is running!"
-echo "📍 Dashboard URL : http://localhost:5000"
-echo "📄 Server Logs   : tail -f data/logs/gunicorn.log"
-echo "🛑 To Stop       : pkill gunicorn"
-echo ""
+# Run the unified CLI server (launches Svelte dev server and Flask API together)
+onion serve
