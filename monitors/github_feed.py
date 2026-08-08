@@ -29,7 +29,11 @@ TELEGRAM_RE = re.compile(r'\b(?:https?://)?(?:t\.me|telegram\.me)/(?:\+|joinchat
 
 DEFAULT_CONFIG = {
     "github_feeds": [
-        "https://raw.githubusercontent.com/fastfire/deepweb-links/master/README.md"
+        "https://raw.githubusercontent.com/fastfire/deepdarkCTI/main/forum.md",
+        "https://raw.githubusercontent.com/fastfire/deepdarkCTI/main/markets.md",
+        "https://raw.githubusercontent.com/fastfire/deepdarkCTI/main/telegram_threat_actors.md",
+        "https://raw.githubusercontent.com/fastfire/deepdarkCTI/main/telegram_infostealer.md",
+        "https://raw.githubusercontent.com/fastfire/deepdarkCTI/main/ransomware_gang.md"
     ]
 }
 
