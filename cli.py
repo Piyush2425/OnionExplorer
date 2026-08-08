@@ -13,7 +13,8 @@ import signal
 import subprocess
 import threading
 import time
-from main import app, start_background_scraper, sync_data_to_database
+from main import app, start_background_scraper, sync_data_to_database, add_log_entry
+from onion_explorer.screenshot_worker import start_screenshot_worker, stop_screenshot_worker, register_log_callback
 import logging
 
 def serve():
@@ -50,11 +51,17 @@ def serve():
     t = threading.Thread(target=start_frontend, daemon=True)
     t.start()
 
+    # Register logging callback and start background screenshot worker
+    register_log_callback(add_log_entry)
+    start_screenshot_worker()
+
     start_background_scraper()
     
     try:
         app.run(debug=False, host="0.0.0.0", port=5000)
     finally:
+        # Gracefully stop screenshot worker thread
+        stop_screenshot_worker()
         if frontend_proc:
             log.info("🛑 Stopping SvelteKit dev server...")
             try:
