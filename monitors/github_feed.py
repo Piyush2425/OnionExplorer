@@ -278,7 +278,7 @@ def parse_extracted_links(text: str, source_url: str):
                 "last_visit": "",
                 "server_info": "",
                 "url_type": "market" if category == "markets" else "leak_site",
-                "status": "Offline",
+                "status": "Not scanned yet",
                 "source": src_tag
             })
 
@@ -306,7 +306,7 @@ def parse_extracted_links(text: str, source_url: str):
                 "last_visit": "",
                 "server_info": "",
                 "url_type": "telegram",
-                "status": "Offline",
+                "status": "Not scanned yet",
                 "source": src_tag
             })
 
