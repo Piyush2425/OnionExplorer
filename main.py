@@ -32,6 +32,7 @@ from datetime import datetime, timedelta
 from flask import Flask, render_template, jsonify, request, make_response
 
 # Import threat location library
+from onion_explorer import ThreatLocationClient
 from onion_explorer.exporters import export_to_json, export_to_csv, export_to_html
 from onion_explorer.screenshot_worker import start_screenshot_worker, stop_screenshot_worker, queue_url_for_screenshot, get_screenshot_worker_status
 from monitors import ransomfeed, ransomelook, ransomelive, github_feed, telegram_checker, watchguard
