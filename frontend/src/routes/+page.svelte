@@ -650,6 +650,13 @@
 			>
 				📝 Export Markdown
 			</a>
+			<a
+				href="/api/export/html?sector={currentTab}&status={currentFilter}&source={currentSourceFilter}"
+				class="chip export-btn html-btn"
+				style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #ffffff; border-color: transparent;"
+			>
+				🖼️ Export HTML (with Screenshots)
+			</a>
 		</div>
 	</section>
 
