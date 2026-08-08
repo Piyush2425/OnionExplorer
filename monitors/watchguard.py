@@ -81,30 +81,32 @@ def make_driver() -> webdriver.Chrome:
 
 
 # ─── Phase 1: Scrape listing table (all pages) ───────────────────────────────
-def scrape_listing_table(driver: webdriver.Chrome) -> list[dict]:
+def scrape_listing_table() -> list[dict]:
     """
-    Scrape the main tracker table across ALL pages.
+    Scrape the main tracker table across ALL pages using high-speed HTTP requests.
     Returns a list of dicts with: group_name, group_url, status, ransomware_type,
     first_seen, last_seen.
     """
     groups = []
     page = 0
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+    }
 
     while True:
         url = f"{TRACKER_URL}?page={page}"
         log.info(f"📄 Scraping listing page {page}: {url}")
-        driver.get(url)
 
-        # Wait for the table body to appear
         try:
-            WebDriverWait(driver, 15).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "table tbody tr"))
-            )
-        except TimeoutException:
-            log.warning(f"  Table not found on page {page} — stopping pagination.")
+            resp = requests.get(url, headers=headers, timeout=15)
+            if resp.status_code != 200:
+                log.warning(f"  Page {page} returned status {resp.status_code} — stopping pagination.")
+                break
+        except Exception as err:
+            log.error(f"  Failed to fetch WatchGuard listing page {page}: {err}")
             break
 
-        soup = BeautifulSoup(driver.page_source, "html.parser")
+        soup = BeautifulSoup(resp.text, "html.parser")
         rows = soup.select("table tbody tr")
 
         if not rows:
@@ -168,7 +170,7 @@ def scrape_listing_table(driver: webdriver.Chrome) -> list[dict]:
             break
 
         page += 1
-        time.sleep(0.5)
+        time.sleep(0.3)
 
     log.info(f"✅ Total groups scraped from listing: {len(groups)}")
     return groups
@@ -243,45 +245,40 @@ def save_outputs(groups: list[dict]):
 # ─── Main ────────────────────────────────────────────────────────────────────
 def main():
     log.info("🚀 WatchGuard Ransomware Tracker Scraper starting...")
-    driver = make_driver()
 
-    try:
-        # Phase 1: Get all group metadata from listing pages via Selenium
-        groups = scrape_listing_table(driver)
+    # Phase 1: Get all group metadata from listing pages via requests
+    groups = scrape_listing_table()
 
-        if not groups:
-            log.warning("No groups found. Exiting.")
-            return
+    if not groups:
+        log.warning("No groups found. Exiting.")
+        return
 
-        # Phase 2: Visit each detail page concurrently with 25 parallel threads
-        log.info(f"\n🔍 Concurrently scraping detail pages for {len(groups)} groups...")
-        with ThreadPoolExecutor(max_workers=25) as executor:
-            futures = [executor.submit(scrape_group_detail_fast, group) for group in groups]
-            completed_count = 0
-            for future in as_completed(futures):
-                completed_count += 1
-                if completed_count % 50 == 0 or completed_count == len(groups):
-                    log.info(f"  Progress: [{completed_count}/{len(groups)}] group detail pages completed.")
+    # Phase 2: Visit each detail page concurrently with 25 parallel threads
+    log.info(f"\n🔍 Concurrently scraping detail pages for {len(groups)} groups...")
+    with ThreadPoolExecutor(max_workers=25) as executor:
+        futures = [executor.submit(scrape_group_detail_fast, group) for group in groups]
+        completed_count = 0
+        for future in as_completed(futures):
+            completed_count += 1
+            if completed_count % 50 == 0 or completed_count == len(groups):
+                log.info(f"  Progress: [{completed_count}/{len(groups)}] group detail pages completed.")
 
-        # Phase 3: Save both JSON and CSV
-        save_outputs(groups)
+    # Phase 3: Save both JSON and CSV
+    save_outputs(groups)
 
-        # Summary
-        active   = sum(1 for g in groups if g["status"] == "Active")
-        inactive = len(groups) - active
-        with_onion = sum(1 for g in groups if g["onion_links"])
+    # Summary
+    active   = sum(1 for g in groups if g["status"] == "Active")
+    inactive = len(groups) - active
+    with_onion = sum(1 for g in groups if g["onion_links"])
 
-        log.info("\n" + "=" * 50)
-        log.info("📊 SCRAPING SUMMARY")
-        log.info(f"  Total Groups     : {len(groups)}")
-        log.info(f"  Active           : {active}")
-        log.info(f"  Inactive         : {inactive}")
-        log.info(f"  Groups with Onion: {with_onion}")
-        log.info("=" * 50)
-        log.info("✨ Done.")
-
-    finally:
-        driver.quit()
+    log.info("\n" + "=" * 50)
+    log.info("📊 SCRAPING SUMMARY")
+    log.info(f"  Total Groups     : {len(groups)}")
+    log.info(f"  Active           : {active}")
+    log.info(f"  Inactive         : {inactive}")
+    log.info(f"  Groups with Onion: {with_onion}")
+    log.info("=" * 50)
+    log.info("✨ Done.")
 
 
 if __name__ == "__main__":
