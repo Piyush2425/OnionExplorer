@@ -6,6 +6,9 @@ Usage:
 """
 import sys
 import os
+# Inject the root directory containing this file to python's import path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 import signal
 import subprocess
 import threading

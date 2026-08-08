@@ -19,6 +19,9 @@ dependencies = [
 async = ["aiohttp>=3.8.0"]
 sqlite = []
 
+[tool.setuptools]
+py-modules = ["cli"]
+
 [tool.setuptools.packages.find]
 where = ["."]
 
