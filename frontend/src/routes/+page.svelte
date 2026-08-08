@@ -178,8 +178,9 @@
 
 	async function triggerManualScrape() {
 		try {
-			await fetch('/api/scraper/trigger', { method: 'POST' });
+			await fetch('/api/scraper/run', { method: 'POST' });
 			await loadScraperStatus();
+			await fetchLogs();
 		} catch (err) {
 			console.error('Failed to trigger scrape:', err);
 		}

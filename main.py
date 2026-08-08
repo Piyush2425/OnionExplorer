@@ -1045,6 +1045,7 @@ def api_scraper_logs():
 
 
 @app.route("/api/scraper/run", methods=["POST"])
+@app.route("/api/scraper/trigger", methods=["POST"])
 def api_scraper_run():
     """Manually trigger a scrape."""
     with state_lock:
