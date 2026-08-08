@@ -180,6 +180,25 @@ def load_queue_from_db():
             log_worker_event(f"💾 Loaded and restored {len(tasks)} pending screenshot tasks from database.")
     except Exception as e:
         logger.error(f"Failed to load queue from DB: {e}")
+def reset_screenshot_worker():
+    """Clears in-memory screenshot queue and deletes saved PNG screenshot files."""
+    global active_tasks, task_queue
+    with tasks_lock:
+        active_tasks.clear()
+        while not task_queue.empty():
+            try:
+                task_queue.get_nowait()
+                task_queue.task_done()
+            except Exception:
+                break
+    import glob
+    for filepath in glob.glob(os.path.join(SCREENSHOTS_DIR, "*.png")):
+        try:
+            os.remove(filepath)
+        except Exception:
+            pass
+    log_worker_event("🧹 Screenshot worker memory queue and screenshot image cache reset.")
+
 
 def queue_url_for_screenshot(entity_key: str, url: str, force: bool = False):
     """Adds a location URL to the verification and screenshot task queue."""

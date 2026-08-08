@@ -59,13 +59,14 @@ def export_to_html(rows: List[Dict[str, Any]], scope_label: str, status_filter: 
             line-height: 1.5;
         }}
         .container {{
-            max-width: 1200px;
+            max-width: 96%;
             margin: 0 auto;
             background: #ffffff;
             padding: 30px;
             border-radius: 12px;
             box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.02);
             border: 1px solid #e2e8f0;
+            box-sizing: border-box;
         }}
         .header {{
             border-bottom: 2px solid #f1f5f9;
@@ -114,14 +115,17 @@ def export_to_html(rows: List[Dict[str, Any]], scope_label: str, status_filter: 
         
         table {{
             width: 100%;
+            table-layout: fixed;
             border-collapse: collapse;
             margin-top: 15px;
         }}
         th, td {{
-            padding: 14px 16px;
+            padding: 12px 14px;
             text-align: left;
             border-bottom: 1px solid #e2e8f0;
-            font-size: 0.9rem;
+            font-size: 0.88rem;
+            word-break: break-all;
+            overflow-wrap: anywhere;
         }}
         th {{
             background: #f1f5f9;
@@ -153,8 +157,8 @@ def export_to_html(rows: List[Dict[str, Any]], scope_label: str, status_filter: 
         .thumbnail-container {{
             display: inline-block;
             vertical-align: middle;
-            width: 120px;
-            height: 75px;
+            width: 110px;
+            height: 68px;
             overflow: hidden;
             border-radius: 6px;
             border: 1px solid #cbd5e1;
@@ -240,6 +244,15 @@ def export_to_html(rows: List[Dict[str, Any]], scope_label: str, status_filter: 
         
         <div style="overflow-x: auto;">
             <table>
+                <colgroup>
+                    <col style="width: 14%;">
+                    <col style="width: 8%;">
+                    <col style="width: 38%;">
+                    <col style="width: 10%;">
+                    <col style="width: 10%;">
+                    <col style="width: 10%;">
+                    <col style="width: 10%;">
+                </colgroup>
                 <thead>
                     <tr>
                         <th>Threat Actor / Entity</th>

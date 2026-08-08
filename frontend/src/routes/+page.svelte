@@ -178,14 +178,24 @@
 
 	async function triggerManualScrape() {
 		try {
-			scraperState.is_running = true;
-			const res = await fetch('/api/scraper/run', { method: 'POST' });
-			if (res.ok) {
-				loadScraperStatus();
-				fetchLogs();
+			await fetch('/api/scraper/trigger', { method: 'POST' });
+			await loadScraperStatus();
+		} catch (err) {
+			console.error('Failed to trigger scrape:', err);
+		}
+	}
+
+	async function resetScanData() {
+		if (!confirm('Are you sure you want to reset all scanned statuses and delete cached screenshots?')) return;
+		try {
+			const res = await fetch('/api/scan/reset', { method: 'POST' });
+			const data = await res.json();
+			if (data.status === 'success') {
+				await loadData();
+				await loadScreenshotStatus();
 			}
 		} catch (err) {
-			console.error('Failed to run manual scrape:', err);
+			console.error('Failed to reset scan data:', err);
 		}
 	}
 
@@ -540,6 +550,9 @@
 						</div>
 						<button class="settings-action-btn" onclick={triggerManualScrape} disabled={scraperState.is_running}>
 							🔄 Scrape Now
+						</button>
+						<button class="settings-action-btn" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border-color: rgba(239, 68, 68, 0.3); margin-top: 6px;" onclick={resetScanData}>
+							🧹 Reset Scan Data
 						</button>
 					</div>
 				{/if}

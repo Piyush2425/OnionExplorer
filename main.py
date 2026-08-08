@@ -1152,6 +1152,22 @@ def api_screenshot_resume():
     return jsonify({"status": "resumed", "running": True})
 
 
+@app.route("/api/scan/reset", methods=["POST"])
+def api_scan_reset():
+    """Reset all scanned statuses back to 'Not scanned yet', clear screenshots, and empty queue."""
+    try:
+        from onion_explorer.database import get_database
+        from onion_explorer.screenshot_worker import reset_screenshot_worker
+        db = get_database()
+        db.reset_all_scanned_statuses()
+        reset_screenshot_worker()
+        log.info("🧹 [Reset] All scanned statuses, screenshots, and task queue have been reset.")
+        return jsonify({"status": "success", "message": "All scanned statuses reset."})
+    except Exception as e:
+        log.error(f"Reset scan error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/url/analyst_update", methods=["POST"])
 def api_url_analyst_update():
     """Manually update analyst annotations for a specific location link."""

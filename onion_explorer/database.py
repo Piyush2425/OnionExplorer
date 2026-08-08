@@ -311,7 +311,14 @@ class SQLiteIntelDatabase(BaseDatabase):
                     return json.loads(row["value"])
                 except Exception:
                     pass
-        return []
+    def reset_all_scanned_statuses(self):
+        with self._get_conn() as conn:
+            conn.execute("""
+                UPDATE locations
+                SET status = 'Not scanned yet', screenshot = NULL, last_visit = 'N/A'
+            """)
+            conn.execute("DELETE FROM metadata WHERE key = ?", ("screenshot_queue",))
+            conn.commit()
 
 
 class MongoIntelDatabase(BaseDatabase):
@@ -431,6 +438,13 @@ class MongoIntelDatabase(BaseDatabase):
         if doc and "value" in doc:
             return doc["value"]
         return []
+
+    def reset_all_scanned_statuses(self):
+        self.db.entities.update_many(
+            {},
+            {"$set": {"urls.$[].status": "Not scanned yet", "urls.$[].screenshot": None, "urls.$[].last_visit": "N/A"}}
+        )
+        self.db.metadata.delete_one({"_id": "screenshot_queue"})
 
     def get_unified_data(self) -> Dict[str, Any]:
         forums_groups = {}
