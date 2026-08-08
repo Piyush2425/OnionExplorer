@@ -84,11 +84,31 @@ def serve():
                 except Exception:
                     pass
 
+def reset_data():
+    log = logging.getLogger("OnionExplorer")
+    log.info("🧹 Performing complete system scan reset...")
+    try:
+        from onion_explorer.database import get_database
+        from onion_explorer.screenshot_worker import reset_screenshot_worker
+        db = get_database()
+        db.reset_all_scanned_statuses()
+        reset_screenshot_worker()
+        log.info("✅ All scanned data, screenshots, and task queues have been completely wiped!")
+        log.info("   All link statuses reset to 'Not scanned yet' and ready for a fresh scan.")
+    except Exception as e:
+        log.error(f"Reset failed: {e}")
+
 def main():
-    if len(sys.argv) < 2 or sys.argv[1] != "serve":
-        print("Usage: onion serve")
+    cmd = sys.argv[1] if len(sys.argv) > 1 else "serve"
+    if cmd == "reset":
+        reset_data()
+    elif cmd == "serve":
+        serve()
+    else:
+        print("Usage:")
+        print("  onion serve — Start dashboard and screenshot worker")
+        print("  onion reset — Clear all previous scan data and screenshots")
         sys.exit(1)
-    serve()
 
 if __name__ == "__main__":
     main()
