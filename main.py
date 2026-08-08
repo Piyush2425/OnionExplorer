@@ -29,7 +29,7 @@ import importlib
 import asyncio
 import io
 from datetime import datetime, timedelta
-from flask import Flask, render_template, jsonify, request, make_response
+from flask import Flask, render_template, jsonify, request, make_response, send_from_directory
 
 # Import threat location library
 from onion_explorer import ThreatLocationClient
@@ -1170,6 +1170,13 @@ def api_scan_reset():
     except Exception as e:
         log.error(f"Reset scan error: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/static/screenshots/<path:filename>")
+def serve_screenshot(filename):
+    """Serve saved screenshot PNG files from static/screenshots directory."""
+    screenshots_dir = os.path.join(BASE_DIR, "static", "screenshots")
+    return send_from_directory(screenshots_dir, filename)
 
 
 @app.route("/api/url/analyst_update", methods=["POST"])
