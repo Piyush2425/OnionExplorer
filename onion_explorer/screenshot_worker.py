@@ -208,6 +208,7 @@ def worker_loop():
     while running:
         try:
             task = task_queue.get(timeout=2)
+            start_time = time.time()
             entity_key = task["entity_key"]
             url = task["url"]
             save_queue_to_db()
@@ -223,13 +224,22 @@ def worker_loop():
                 task_queue.task_done()
                 save_queue_to_db()
                 
-            # Rate limit scans to 1-minute interval per link
+            # Adaptive rate limit scans to strict 1-minute interval per link
             if running:
-                log_worker_event("⏳ Scan task completed. Sleeping 60 seconds before next scan.")
-                for _ in range(60):
-                    if not running:
-                        break
-                    time.sleep(1)
+                elapsed = time.time() - start_time
+                remaining_sleep = max(0.0, 60.0 - elapsed)
+                if remaining_sleep > 0:
+                    log_worker_event(f"⏳ Scan completed in {elapsed:.1f}s. Adaptive sleep for {remaining_sleep:.1f}s before next scan.")
+                    sleep_seconds = int(remaining_sleep)
+                    fractional_sleep = remaining_sleep - sleep_seconds
+                    if fractional_sleep > 0:
+                        time.sleep(fractional_sleep)
+                    for _ in range(sleep_seconds):
+                        if not running:
+                            break
+                        time.sleep(1)
+                else:
+                    log_worker_event(f"⏳ Scan completed in {elapsed:.1f}s (exceeded 60s). Proceeding to next scan immediately.")
         except Empty:
             continue
         except Exception as e:

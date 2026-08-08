@@ -962,8 +962,10 @@ def api_export_html():
                 url_status = url_info.get("status", "Unknown")
                 is_online = (url_status == "Online" or url_status == "Up")
                 url_source = url_info.get("source", "")
-                # HTML export only contains active online/up/verified links
-                if not is_online:
+                # Filters
+                if status_filter == "online" and not is_online:
+                    continue
+                if status_filter == "offline" and is_online:
                     continue
                 if source_filter != "all" and url_source != source_filter:
                     continue
