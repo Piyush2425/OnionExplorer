@@ -278,9 +278,10 @@ def build_unified_data_from_files():
                 loc_src = loc.get("source", "github")
                 if loc_src not in telegram_links[key]["sources"]:
                     telegram_links[key]["sources"].append(loc_src)
+                loc_status = loc.get("status") or ("Online" if avail else "Not scanned yet")
                 telegram_links[key]["urls"].append({
                     "url": loc.get("url", ""),
-                    "status": "Online" if avail else "Offline",
+                    "status": loc_status,
                     "source": loc_src,
                     "url_type": "telegram"
                 })
@@ -298,9 +299,10 @@ def build_unified_data_from_files():
                 loc_src = loc.get("source", "github")
                 if loc_src not in forums_groups[key]["sources"]:
                     forums_groups[key]["sources"].append(loc_src)
+                loc_status = loc.get("status") or ("Online" if avail else "Not scanned yet")
                 forums_groups[key]["urls"].append({
                     "url": loc.get("url", ""),
-                    "status": "Online" if avail else "Offline",
+                    "status": loc_status,
                     "source": loc_src,
                     "fqdn": loc.get("fqdn", ""),
                     "url_type": "leak_site"
@@ -320,9 +322,10 @@ def build_unified_data_from_files():
                 loc_src = loc.get("source", "github")
                 if loc_src not in markets[key]["sources"]:
                     markets[key]["sources"].append(loc_src)
+                loc_status = loc.get("status") or ("Online" if avail else "Not scanned yet")
                 markets[key]["urls"].append({
                     "url": loc.get("url", ""),
-                    "status": "Online" if avail else "Offline",
+                    "status": loc_status,
                     "source": loc_src,
                     "fqdn": loc.get("fqdn", ""),
                     "url_type": "market"
